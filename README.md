@@ -8,7 +8,7 @@ You (Telegram) → Bot (this relay) → claude -p → response → Bot → You
 
 The relay is a pure message shuttle — **zero AI tokens** are consumed by the relay itself. All Claude usage runs through your existing Claude Code CLI auth (Max subscription or API key).
 
-Pair with [Engram](https://github.com/bbesner/engram) for persistent memory across all your Claude Code sessions -- including conversations that come through this relay.
+Pair with [FlipClaw](https://github.com/bbesner/flipclaw) for persistent memory across all your Claude Code sessions -- including conversations that come through this relay.
 
 ## Features
 
@@ -133,7 +133,7 @@ Each group gets its own independent Claude session. You can have the bot in a gr
 
 ## Memory Integration
 
-If you use [Engram](https://github.com/bbesner/engram) or any other Claude Code hook-based memory system, your Telegram conversations will be captured automatically. The relay invokes `claude -p` as a normal subprocess, so:
+If you use [FlipClaw](https://github.com/bbesner/flipclaw) or any other Claude Code hook-based memory system, your Telegram conversations will be captured automatically. The relay invokes `claude -p` as a normal subprocess, so:
 
 - **Stop hook** fires per-turn for fact extraction
 - **SessionEnd hook** fires when the session ends for full transcript capture
