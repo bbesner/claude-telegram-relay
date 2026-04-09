@@ -1,0 +1,17 @@
+{
+  "name": "claude-telegram-relay",
+  "version": "1.0.0",
+  "description": "Relay messages between Telegram and Claude Code CLI",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "LOG_LEVEL=debug node bot.js"
+  },
+  "keywords": ["claude", "telegram", "relay", "claude-code", "cli"],
+  "author": "Brad Besner",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
