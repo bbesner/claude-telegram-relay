@@ -13,7 +13,7 @@ Thanks for your interest in contributing! This project is a lightweight relay be
 
 - **Keep it simple.** The relay is a message shuttle, not a framework. Resist adding abstractions unless they solve a clear problem.
 - **No new dependencies** without discussion. The project intentionally has a minimal dependency footprint (just `dotenv` and `node-telegram-bot-api`).
-- **Test manually.** There is no automated test suite yet. Before submitting a PR, verify your change works end-to-end with a real Telegram bot.
+- **Run the test suite.** `npm test` runs hermetic unit tests covering the session browser, session manager, command handlers, and bot startup — no Telegram account or real Claude CLI required. Please add or update tests when you change behavior in `lib/`. Before submitting a PR, also verify your change works end-to-end against a real Telegram bot for anything that touches the message path.
 - **One concern per PR.** Small, focused pull requests are easier to review and merge.
 
 ## What to Contribute
