@@ -8,7 +8,7 @@ You (Telegram) → Bot (this relay) → claude -p → response → Bot → You
 
 The relay is a pure message shuttle — **zero AI tokens** are consumed by the relay itself. All Claude usage runs through your existing Claude Code CLI auth (Max subscription or API key).
 
-Pair with [FlipClaw](https://github.com/bbesner/flipclaw) for persistent memory across all your Claude Code sessions -- including conversations that come through this relay.
+**Works standalone with any Claude Code CLI setup** — no other tools or plugins required. You can optionally pair it with [FlipClaw](https://github.com/bbesner/flipclaw) if you want persistent cross-session memory, but every feature below works without it.
 
 ## Features
 
@@ -16,13 +16,14 @@ Pair with [FlipClaw](https://github.com/bbesner/flipclaw) for persistent memory 
 - **Cross-interface resume** — `/resume <n>` jumps into any session by number, ID, or saved label — even sessions started outside Telegram
 - **Session labeling** — `/save <name>` labels the current session for instant recall later
 - **Session continuity** — conversations persist across messages using `--resume`
+- **Native command menu** — all commands auto-register with Telegram on startup, so tapping `/` in the chat shows a full autocomplete dropdown and populates the Menu button
 - **Group chat support** — add the bot to groups alongside other bots; responds to @mentions
 - **Message queuing** — sequential per-chat processing prevents race conditions
 - **Markdown formatting** — Claude's output is converted to Telegram-safe HTML
 - **Long message chunking** — responses over 4000 chars are split at paragraph boundaries
 - **Media support** — send photos, PDFs, documents; Claude analyzes them and sends files back
 - **Server management commands** — `/status`, `/logs`, `/restart`, `/deploy` are forwarded to Claude Code
-- **Memory integration** — Claude Code's hooks fire normally, so sessions flow into your existing memory pipeline
+- **Memory integration (optional)** — Claude Code's hooks fire normally, so sessions flow into any hook-based memory pipeline you already use (e.g. FlipClaw) — no extra setup needed
 
 ## Prerequisites
 
@@ -63,6 +64,8 @@ bash install.sh \
 
 Open Telegram and send a message to your bot.
 
+Tip: tap the `/` button (or the Menu button next to the chat input) to see every command with a description. The relay registers its full command menu with Telegram automatically on startup.
+
 ## Configuration
 
 All configuration lives in `.env` (created by the installer):
@@ -83,6 +86,8 @@ All configuration lives in `.env` (created by the installer):
 Find your Telegram user ID by messaging [@userinfobot](https://t.me/userinfobot).
 
 ## Commands
+
+All commands below are also available as a native Telegram autocomplete: tap `/` in the chat input, or tap the Menu button next to the input field. The relay publishes its command list to Telegram on every startup via `setMyCommands`, so there's nothing to configure in BotFather.
 
 ### Bot Commands (instant, no AI tokens used)
 
@@ -181,15 +186,17 @@ Later:
 /resume twilio-fix
 ```
 
-## Memory Integration
+## Memory Integration (optional)
 
-If you use [FlipClaw](https://github.com/bbesner/flipclaw) or any other Claude Code hook-based memory system, your Telegram conversations will be captured automatically. The relay invokes `claude -p` as a normal subprocess, so:
+The relay invokes `claude -p` as a normal subprocess, so any Claude Code hook you've already set up fires exactly the same way for Telegram messages as it does for Desktop or VS Code sessions:
 
-- **Stop hook** fires per-turn for fact extraction
-- **SessionEnd hook** fires when the session ends for full transcript capture
-- Sessions appear in `~/.claude/projects/` like any other Claude Code session
+- **Stop hook** fires per-turn (useful for fact extraction)
+- **SessionEnd hook** fires when the session ends (useful for full transcript capture)
+- Session transcripts land in `~/.claude/projects/` like any other Claude Code session — which is also what makes `/sessions` work
 
-No additional configuration needed — it just works.
+No additional configuration needed — if you have hooks, they just work. If you don't, the relay still works fine on its own; you just won't get any cross-session memory.
+
+If you want a drop-in hook-based memory system, [FlipClaw](https://github.com/bbesner/flipclaw) is one option, but any hook framework (or your own custom hook scripts) will work equally well.
 
 ## Managing the Service
 
