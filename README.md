@@ -12,6 +12,9 @@ Pair with [FlipClaw](https://github.com/bbesner/flipclaw) for persistent memory 
 
 ## Features
 
+- **Session browser** — `/sessions` lists all recent Claude Code sessions across every interface (Desktop, VS Code, Telegram) so you can pick up any thread from your phone
+- **Cross-interface resume** — `/resume <n>` jumps into any session by number, ID, or saved label — even sessions started outside Telegram
+- **Session labeling** — `/save <name>` labels the current session for instant recall later
 - **Session continuity** — conversations persist across messages using `--resume`
 - **Group chat support** — add the bot to groups alongside other bots; responds to @mentions
 - **Message queuing** — sequential per-chat processing prevents race conditions
@@ -85,6 +88,11 @@ Find your Telegram user ID by messaging [@userinfobot](https://t.me/userinfobot)
 
 | Command | Description |
 |---------|-------------|
+| `/sessions` | List all recent Claude Code sessions across all interfaces |
+| `/resume <n>` | Resume session #n from the last `/sessions` list |
+| `/resume <session-id>` | Resume by full or partial session ID |
+| `/resume <label>` | Resume by saved label |
+| `/save <name>` | Label the current session (e.g. `/save sck-migration`) |
 | `/start` | Welcome message and command list |
 | `/new` | Clear session, start a fresh conversation |
 | `/info` | Show session ID, message count, uptime |
@@ -130,6 +138,48 @@ Each group gets its own independent Claude session. You can have the bot in a gr
 - Sessions persist across bot restarts (stored in `~/.claude-telegram-relay/sessions.json`)
 - Use `/new` to start a fresh conversation
 - If a session becomes corrupted, the bot automatically starts a fresh one
+
+### Cross-Interface Session Sharing
+
+Since all Claude Code interfaces (Desktop app, VS Code, Telegram) SSH into the same server and share the same `~/.claude/projects/` directory, **all sessions are visible from Telegram regardless of which interface started them**.
+
+```
+/sessions
+```
+```
+Recent Claude Code Sessions
+
+1. 2h ago  ~/ari 📱
+   0844dd6e  1542KB
+   Hi this is brad
+
+2. 4h ago  ~
+   84be4f10  4732KB
+   You are working inside Ari's workspace…
+
+3. yesterday  ~/sarah
+   21debf64  783KB
+   I'd like to review the Twilio ConversationRelay config…
+
+📱 = started via Telegram
+Resume: /resume 3  or  /resume <full-id>
+```
+
+```
+/resume 3
+```
+→ Next message continues the Twilio session.
+
+To hand off from Telegram to Desktop: note the session ID from `/info` in Telegram, then use `claude --resume <id>` in the Desktop app.
+
+To label a session for easy recall:
+```
+/save twilio-fix
+```
+Later:
+```
+/resume twilio-fix
+```
 
 ## Memory Integration
 
