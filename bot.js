@@ -28,9 +28,32 @@ const GROUP_MODE = process.env.GROUP_MODE || 'mention';
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 let botInfo;
 
+// Commands published to Telegram so they appear in the native `/` autocomplete
+// and the "Menu" button next to the chat input. Stored on Telegram's side, so
+// one call per deploy is enough.
+const BOT_COMMANDS = [
+  { command: 'sessions', description: 'List recent Claude Code sessions' },
+  { command: 'resume',   description: 'Resume a session by #, ID, or label' },
+  { command: 'save',     description: 'Label the current session for easy recall' },
+  { command: 'new',      description: 'Clear session, start a fresh conversation' },
+  { command: 'info',     description: 'Show current session ID, messages, uptime' },
+  { command: 'model',    description: 'Show or set model (sonnet, opus, haiku)' },
+  { command: 'status',   description: 'Full server status (PM2, disk, memory)' },
+  { command: 'logs',     description: 'Show recent logs for a PM2 service' },
+  { command: 'restart',  description: 'Restart a PM2 service' },
+  { command: 'deploy',   description: 'Deploy a site via SSH' },
+  { command: 'help',     description: 'Show all commands' },
+  { command: 'start',    description: 'Welcome message and command list' },
+];
+
 bot.getMe().then((me) => {
   botInfo = me;
   log.info('Bot started', { username: me.username, id: me.id });
+
+  // Publish the command list to Telegram so users get a native / autocomplete.
+  bot.setMyCommands(BOT_COMMANDS)
+    .then(() => log.info('Published bot command menu', { count: BOT_COMMANDS.length }))
+    .catch((err) => log.warn('setMyCommands failed', { error: err.message }));
 
   // Send startup notification if configured
   if (process.env.SEND_STARTUP_MESSAGE === 'true') {
