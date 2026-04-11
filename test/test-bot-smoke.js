@@ -1,5 +1,7 @@
 // Smoke-test: require bot.js with a fake node-telegram-bot-api so it can boot
 // through registerCommands + setMyCommands without actually polling Telegram.
+// Also disables the v1.5.0 update checker so the test doesn't try to hit
+// api.github.com from CI.
 const fs = require('fs');
 const path = require('path');
 const Module = require('module');
@@ -12,6 +14,7 @@ process.env.TELEGRAM_BOT_TOKEN = 'fake-token-for-smoke-test';
 process.env.ALLOWED_USER_IDS = '999';
 process.env.CLAUDE_PATH = process.platform === 'win32' ? 'cmd' : '/usr/bin/true';
 process.env.WORKING_DIR = fx.home;
+process.env.UPDATE_CHECK = 'false'; // don't hit GitHub during smoke test
 
 let pass = 0, fail = 0;
 function ok(label, cond, extra) {

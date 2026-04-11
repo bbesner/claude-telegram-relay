@@ -15,6 +15,7 @@ const { enqueue } = require('./lib/message-queue');
 const { registerCommands, getPassthroughPrompt, isOpenclawAvailable } = require('./lib/commands');
 const { registerCallbackHandlers, buildResponseKeyboard, handleSaveReplyIfPresent } = require('./lib/callbacks');
 const { downloadTelegramFile, extractMediaInfo, buildMediaPrompt, extractCreatedFiles } = require('./lib/media');
+const { startPeriodicCheck: startUpdateCheck } = require('./lib/update-checker');
 const log = require('./lib/logger');
 
 // --- Validate required config ---
@@ -72,6 +73,15 @@ bot.getMe().then((me) => {
       bot.sendMessage(uid, `Claude Code Relay is online. (@${me.username})`).catch(() => {});
     }
   }
+
+  // v1.5.0+: start the update checker. Runs once now (async, non-blocking)
+  // and then every 24 hours. Notifies the first ALLOWED_USER_IDS entry
+  // when a newer release is published on GitHub. Opt out with
+  // UPDATE_CHECK=false in .env.
+  const adminId = process.env.ALLOWED_USER_IDS.split(',')[0].trim();
+  startUpdateCheck({
+    sendMessage: (text) => bot.sendMessage(adminId, text, { parse_mode: 'HTML', disable_web_page_preview: true }),
+  });
 });
 
 // --- Register commands ---

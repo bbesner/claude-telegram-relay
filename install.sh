@@ -25,24 +25,27 @@ USER_IDS=""
 INSTALL_DIR=""
 WORKING_DIR=""
 CLAUDE_PATH_ARG=""
+OPENCLAW_CONFIG=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --token)        TOKEN="$2"; shift 2 ;;
-    --users)        USER_IDS="$2"; shift 2 ;;
-    --install-dir)  INSTALL_DIR="$2"; shift 2 ;;
-    --working-dir)  WORKING_DIR="$2"; shift 2 ;;
-    --claude-path)  CLAUDE_PATH_ARG="$2"; shift 2 ;;
+    --token)            TOKEN="$2"; shift 2 ;;
+    --users)            USER_IDS="$2"; shift 2 ;;
+    --install-dir)      INSTALL_DIR="$2"; shift 2 ;;
+    --working-dir)      WORKING_DIR="$2"; shift 2 ;;
+    --claude-path)      CLAUDE_PATH_ARG="$2"; shift 2 ;;
+    --openclaw-config)  OPENCLAW_CONFIG="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: install.sh [OPTIONS]"
       echo ""
       echo "Options:"
-      echo "  --token <token>        Telegram bot token (from @BotFather)"
-      echo "  --users <ids>          Comma-separated allowed Telegram user IDs"
-      echo "  --install-dir <path>   Installation directory (default: ~/claude-telegram-relay)"
-      echo "  --working-dir <path>   Working directory for Claude CLI (default: \$HOME)"
-      echo "  --claude-path <path>   Path to claude binary (auto-detected if omitted)"
-      echo "  -h, --help             Show this help"
+      echo "  --token <token>             Telegram bot token (from @BotFather)"
+      echo "  --users <ids>               Comma-separated allowed Telegram user IDs"
+      echo "  --install-dir <path>        Installation directory (default: ~/claude-telegram-relay)"
+      echo "  --working-dir <path>        Working directory for Claude CLI (default: \$HOME)"
+      echo "  --claude-path <path>        Path to claude binary (auto-detected if omitted)"
+      echo "  --openclaw-config <path>    v1.4.0+: enable /memory by pointing at an OpenClaw config"
+      echo "  -h, --help                  Show this help"
       exit 0
       ;;
     *) fail "Unknown argument: $1" ;;
@@ -151,6 +154,25 @@ CLAUDE_TIMEOUT_MS=120000
 LOG_LEVEL=info
 GROUP_MODE=mention
 EOF
+
+# If the bootstrap (or the user) passed an OpenClaw config, wire up /memory.
+# The default OPENCLAW_CWD is the parent directory of the config file, which
+# is what the openclaw CLI expects for workspace-relative paths.
+if [[ -n "$OPENCLAW_CONFIG" ]]; then
+  if [[ ! -f "$OPENCLAW_CONFIG" ]]; then
+    warn "OpenClaw config not found at $OPENCLAW_CONFIG — skipping /memory wiring"
+  else
+    OPENCLAW_DIR="$(dirname "$OPENCLAW_CONFIG")"
+    cat >> .env <<EOF
+
+# Wired by install.sh --openclaw-config
+OPENCLAW_CONFIG_PATH=${OPENCLAW_CONFIG}
+OPENCLAW_CWD=${OPENCLAW_DIR}
+EOF
+    ok "OpenClaw /memory enabled → ${OPENCLAW_CONFIG}"
+  fi
+fi
+
 ok ".env created"
 
 # Update ecosystem.config.js cwd

@@ -47,6 +47,14 @@ The relay is a pure message shuttle — **zero AI tokens** are consumed by the r
 
 ### 2. Install
 
+**Recommended (v1.5.0+): bootstrap installer.** If you have Claude Code CLI installed, paste this one line into Claude Code and it will walk you through the whole install — detecting what's already on your system, installing any missing prerequisites, and running the installer with the right flags:
+
+```
+Read and follow https://raw.githubusercontent.com/bbesner/claude-telegram-relay/main/BOOTSTRAP.md
+```
+
+**Manual install:** if you'd rather run it yourself, or you don't have Claude Code CLI yet:
+
 ```bash
 git clone https://github.com/bbesner/claude-telegram-relay.git
 cd claude-telegram-relay
@@ -92,6 +100,7 @@ All configuration lives in `.env` (created by the installer):
 | `OPENCLAW_CWD` | No | config parent dir | v1.4.0+: working directory for the openclaw subprocess |
 | `OPENCLAW_SEARCH_TIMEOUT_MS` | No | `90000` | v1.4.0+: timeout (ms) for `/memory` searches. Cold queries on a large semantic index can take 30–90s the first time. |
 | `DEFAULT_CHAT_ID` | No | first `ALLOWED_USER_IDS` entry | v1.3.0+: default recipient for outbound `tg-send` / `sendMessage` calls |
+| `UPDATE_CHECK` | No | `true` | v1.5.0+: notify the admin on Telegram when a new release is published on GitHub. Checks once at startup, then every 24h. Never auto-upgrades — just sends a message with release notes and a link. Set to `false` to disable. |
 
 Find your Telegram user ID by messaging [@userinfobot](https://t.me/userinfobot).
 

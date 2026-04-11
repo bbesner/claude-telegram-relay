@@ -16,6 +16,7 @@ const suites = [
   'test-callbacks.js',
   'test-session-exporter.js',
   'test-export-command.js',
+  'test-update-checker.js',
 ];
 
 const t0 = Date.now();
