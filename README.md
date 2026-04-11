@@ -19,7 +19,10 @@ The relay is a pure message shuttle — **zero AI tokens** are consumed by the r
 - **Native command menu** — all commands auto-register with Telegram on startup, so tapping `/` in the chat shows a full autocomplete dropdown and populates the Menu button
 - **Group chat support** — add the bot to groups alongside other bots; responds to @mentions
 - **Message queuing** — sequential per-chat processing prevents race conditions
-- **Markdown formatting** — Claude's output is converted to Telegram-safe HTML
+- **Markdown formatting with syntax highlighting (v1.4.0+)** — Claude's output is converted to Telegram-safe HTML and fenced code blocks (` ```python `, ` ```bash `, etc) get native syntax coloring in the Telegram clients that support it
+- **Inline keyboard buttons (v1.4.0+)** — every Claude response ends with tappable `[+ New]  [💾 Save]  [ℹ Info]` buttons so you can clear/label/inspect the current session in one tap, no typing required. Disable with `INLINE_KEYBOARDS=false`.
+- **Session export (v1.4.0+)** — `/export` renders the current session as a clean Markdown document and sends it back as a Telegram file attachment, perfect for sharing or archiving
+- **OpenClaw memory search (v1.4.0+, optional)** — if OpenClaw is installed, `/memory <query>` searches your memory directly via `openclaw memory search` with zero AI tokens. Auto-detected from `~/.openclaw/openclaw.json` or a custom `OPENCLAW_CONFIG_PATH`. Standalone users never see this command.
 - **Long message chunking** — responses over 4000 chars are split at paragraph boundaries
 - **Media support** — send photos, PDFs, documents; Claude analyzes them and sends files back
 - **Server management commands** — `/status`, `/logs`, `/restart`, `/deploy` are forwarded to Claude Code
@@ -83,6 +86,11 @@ All configuration lives in `.env` (created by the installer):
 | `GROUP_MODE` | No | `mention` | Group behavior: `mention` (respond to @bot only) or `all` |
 | `SEND_STARTUP_MESSAGE` | No | `false` | Notify users when bot starts |
 | `LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `INLINE_KEYBOARDS` | No | `true` | v1.4.0+: show `[+ New] [💾 Save] [ℹ Info]` buttons under responses. Set to `false` to disable. |
+| `OPENCLAW_CONFIG_PATH` | No | `~/.openclaw/openclaw.json` | v1.4.0+: path to OpenClaw config for the `/memory` command. Leave empty to auto-detect; `/memory` is silently disabled if no OpenClaw is found. |
+| `OPENCLAW_BIN` | No | `openclaw` (on PATH) | v1.4.0+: path to the `openclaw` binary |
+| `OPENCLAW_CWD` | No | config parent dir | v1.4.0+: working directory for the openclaw subprocess |
+| `DEFAULT_CHAT_ID` | No | first `ALLOWED_USER_IDS` entry | v1.3.0+: default recipient for outbound `tg-send` / `sendMessage` calls |
 
 Find your Telegram user ID by messaging [@userinfobot](https://t.me/userinfobot).
 
@@ -102,8 +110,17 @@ All commands below are also available as a native Telegram autocomplete: tap `/`
 | `/start` | Welcome message and command list |
 | `/new` | Clear session, start a fresh conversation |
 | `/info` | Show session ID, message count, uptime |
+| `/export` | v1.4.0+: Dump the current session as a Markdown file and send it as a document |
 | `/model [name]` | Show or set model override |
 | `/help` | List all commands |
+
+### Optional: OpenClaw Memory Search (v1.4.0+)
+
+Only appears when an OpenClaw installation is auto-detected (see `OPENCLAW_CONFIG_PATH`). Standalone Claude Code users never see this command.
+
+| Command | Description |
+|---------|-------------|
+| `/memory <query>` | Run `openclaw memory search` directly and return the top 5 results with scores. Zero AI tokens consumed. |
 
 ### Server Commands (forwarded to Claude Code)
 

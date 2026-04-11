@@ -8,7 +8,8 @@ const { invokeClaude } = require('./lib/claude-cli');
 const { formatResponse } = require('./lib/formatter');
 const { getSession, setSession, getUserModel, sessionKey } = require('./lib/session-manager');
 const { enqueue } = require('./lib/message-queue');
-const { registerCommands, getPassthroughPrompt } = require('./lib/commands');
+const { registerCommands, getPassthroughPrompt, isOpenclawAvailable } = require('./lib/commands');
+const { registerCallbackHandlers, buildResponseKeyboard, handleSaveReplyIfPresent } = require('./lib/callbacks');
 const { downloadTelegramFile, extractMediaInfo, buildMediaPrompt, extractCreatedFiles } = require('./lib/media');
 const log = require('./lib/logger');
 
@@ -30,13 +31,15 @@ let botInfo;
 
 // Commands published to Telegram so they appear in the native `/` autocomplete
 // and the "Menu" button next to the chat input. Stored on Telegram's side, so
-// one call per deploy is enough.
+// one call per deploy is enough. /memory is appended only when OpenClaw is
+// detected, so standalone users never see it.
 const BOT_COMMANDS = [
   { command: 'sessions', description: 'List recent Claude Code sessions' },
   { command: 'resume',   description: 'Resume a session by #, ID, or label' },
   { command: 'save',     description: 'Label the current session for easy recall' },
   { command: 'new',      description: 'Clear session, start a fresh conversation' },
   { command: 'info',     description: 'Show current session ID, messages, uptime' },
+  { command: 'export',   description: 'Export current session as a Markdown file' },
   { command: 'model',    description: 'Show or set model (sonnet, opus, haiku)' },
   { command: 'status',   description: 'Full server status (PM2, disk, memory)' },
   { command: 'logs',     description: 'Show recent logs for a PM2 service' },
@@ -45,6 +48,9 @@ const BOT_COMMANDS = [
   { command: 'help',     description: 'Show all commands' },
   { command: 'start',    description: 'Welcome message and command list' },
 ];
+if (isOpenclawAvailable()) {
+  BOT_COMMANDS.splice(6, 0, { command: 'memory', description: 'Search OpenClaw memory (no AI tokens)' });
+}
 
 bot.getMe().then((me) => {
   botInfo = me;
@@ -65,10 +71,16 @@ bot.getMe().then((me) => {
 });
 
 // --- Register commands ---
+const BOT_START_TIME = Date.now();
 registerCommands(bot);
+registerCallbackHandlers(bot, BOT_START_TIME);
 
 // --- Main message handler ---
 bot.on('message', async (msg) => {
+  // Check if this is a reply to a 💾 Save prompt from an inline keyboard tap
+  // — if so, the callbacks module handles it and we skip Claude entirely.
+  if (await handleSaveReplyIfPresent(bot, msg)) return;
+
   // Check for pass-through commands (e.g. /status, /logs, /restart, /deploy)
   const passthrough = msg.text ? getPassthroughPrompt(msg.text) : null;
 
@@ -220,19 +232,30 @@ bot.on('message', async (msg) => {
 /**
  * Send a response, chunking if necessary.
  * First chunk replies to the original message; subsequent chunks are standalone.
+ * Inline keyboard buttons (v1.4.0) are attached to the LAST chunk only, so
+ * there's one clean action row at the end of the conversation instead of
+ * buttons floating in the middle of a multi-part response.
  */
 async function sendChunkedResponse(chatId, text, replyToId) {
   if (!text) {
-    await bot.sendMessage(chatId, '(empty response)');
+    const opts = {};
+    const kb = buildResponseKeyboard();
+    if (kb) opts.reply_markup = kb;
+    await bot.sendMessage(chatId, '(empty response)', opts);
     return;
   }
 
   const chunks = formatResponse(text);
+  const keyboard = buildResponseKeyboard();
 
   for (let i = 0; i < chunks.length; i++) {
+    const isLast = i === chunks.length - 1;
     const opts = { parse_mode: 'HTML' };
     if (i === 0 && replyToId) {
       opts.reply_to_message_id = replyToId;
+    }
+    if (isLast && keyboard) {
+      opts.reply_markup = keyboard;
     }
     try {
       await bot.sendMessage(chatId, chunks[i], opts);
@@ -241,6 +264,7 @@ async function sendChunkedResponse(chatId, text, replyToId) {
       if (e.message?.includes('parse')) {
         const plainOpts = {};
         if (i === 0 && replyToId) plainOpts.reply_to_message_id = replyToId;
+        if (isLast && keyboard) plainOpts.reply_markup = keyboard;
         await bot.sendMessage(chatId, chunks[i].replace(/<[^>]+>/g, ''), plainOpts);
       } else {
         throw e;
