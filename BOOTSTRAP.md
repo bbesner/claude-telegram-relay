@@ -141,13 +141,13 @@ Wait for the user's confirmation before continuing. When they say done, run `cla
 > 4. Send the command: `/newbot`
 > 5. BotFather will ask for a **display name** — type anything you like, e.g. `My Claude Relay`
 > 6. Then it'll ask for a **username** — this must end in `bot`, e.g. `my_claude_relay_bot`
-> 7. BotFather will reply with a message that includes a line starting with `HTTP API:` followed by a long token that looks like:
+> 7. BotFather will reply with a message that includes a line starting with `HTTP API:` followed by a long token. **Yours will be different from this example** — this is a fake placeholder, not a real token:
 >
 >    ```
->    8729145009:AAEjS3yRDulbCIsmIPibSSEPM_UUQ8fqbgk
+>    1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ0123456789
 >    ```
 >
-> Paste that token here when you have it."
+> Paste your actual token here when you have it."
 
 **Validate the token format before proceeding.** A real bot token is:
 - All on one line
