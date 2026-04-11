@@ -130,9 +130,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "$SCRIPT_DIR" != "$INSTALL_DIR" ]]; then
   info "Copying files to $INSTALL_DIR..."
   mkdir -p "$INSTALL_DIR"
-  cp -r "$SCRIPT_DIR"/{bot.js,lib,package.json,ecosystem.config.js,config,VERSION,LICENSE,README.md,.gitignore} "$INSTALL_DIR/" 2>/dev/null || true
+  cp -r "$SCRIPT_DIR"/{bot.js,lib,scripts,package.json,ecosystem.config.js,config,VERSION,LICENSE,README.md,.gitignore} "$INSTALL_DIR/" 2>/dev/null || true
+  chmod +x "$INSTALL_DIR/scripts/"*.sh 2>/dev/null || true
   ok "Files copied"
 else
+  chmod +x "$INSTALL_DIR/scripts/"*.sh 2>/dev/null || true
   ok "Already in install directory"
 fi
 
@@ -171,6 +173,20 @@ pm2 start ecosystem.config.js
 pm2 save --force 2>/dev/null || true
 ok "Bot started with PM2"
 
+# Create tg-send convenience symlink in the working directory
+# This makes the outbound message helper easy to call from cron, hooks, Claude Code, etc.
+TG_SEND_SCRIPT="$INSTALL_DIR/scripts/send-message.sh"
+if [[ -f "$TG_SEND_SCRIPT" && -d "$WORKING_DIR" ]]; then
+  info "Creating tg-send symlink..."
+  mkdir -p "$WORKING_DIR/scripts"
+  SYMLINK_PATH="$WORKING_DIR/scripts/tg-send"
+  if [[ -L "$SYMLINK_PATH" ]] || [[ -e "$SYMLINK_PATH" ]]; then
+    rm -f "$SYMLINK_PATH"
+  fi
+  ln -s "$TG_SEND_SCRIPT" "$SYMLINK_PATH"
+  ok "Symlink: $SYMLINK_PATH → send-message.sh"
+fi
+
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║          Installation Complete!          ║${NC}"
@@ -184,3 +200,9 @@ echo "  Stop:          pm2 stop claude-telegram-relay"
 echo ""
 echo "  Open Telegram and send a message to your bot to test!"
 echo ""
+if [[ -L "$WORKING_DIR/scripts/tg-send" ]]; then
+  echo -e "  ${CYAN}Outbound notifications:${NC}"
+  echo "    bash $WORKING_DIR/scripts/tg-send \"Your message here\""
+  echo "    echo \"Build done\" | bash $WORKING_DIR/scripts/tg-send --stdin"
+  echo ""
+fi

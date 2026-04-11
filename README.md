@@ -24,6 +24,7 @@ The relay is a pure message shuttle — **zero AI tokens** are consumed by the r
 - **Media support** — send photos, PDFs, documents; Claude analyzes them and sends files back
 - **Server management commands** — `/status`, `/logs`, `/restart`, `/deploy` are forwarded to Claude Code
 - **Memory integration (optional)** — Claude Code's hooks fire normally, so sessions flow into any hook-based memory pipeline you already use (e.g. FlipClaw) — no extra setup needed
+- **Outbound notifications (v1.3.0+)** — `scripts/send-message.sh` and `lib/send-message.js` let cron jobs, deploy hooks, background scripts, and Claude Code agents push notifications to your Telegram. The installer creates a `tg-send` symlink in your working directory for easy calls.
 
 ## Prerequisites
 
@@ -197,6 +198,96 @@ The relay invokes `claude -p` as a normal subprocess, so any Claude Code hook yo
 No additional configuration needed — if you have hooks, they just work. If you don't, the relay still works fine on its own; you just won't get any cross-session memory.
 
 If you want a drop-in hook-based memory system, [FlipClaw](https://github.com/bbesner/flipclaw) is one option, but any hook framework (or your own custom hook scripts) will work equally well.
+
+## Sending Outbound Messages (v1.3.0+)
+
+The relay's primary job is bridging messages **into** Claude Code, but starting in v1.3.0 it also ships an outbound message helper that lets any process on the server send a Telegram notification through your bot. Useful for cron jobs, deploy hooks, long-running background tasks, and Claude Code agents that want to notify you when something is done.
+
+The same bot token used by the relay is reused — no extra configuration needed.
+
+### Shell usage
+
+```bash
+# Direct message (uses default chat ID from .env)
+bash ~/claude-telegram-relay/scripts/send-message.sh "Build 42 succeeded"
+
+# After install, a convenience symlink is created in your working directory
+bash ~/scripts/tg-send "Deployment complete"
+
+# From a file
+bash ~/scripts/tg-send --file /tmp/deploy-summary.txt
+
+# From stdin (great for piping logs or generated reports)
+git log --oneline -10 | bash ~/scripts/tg-send --stdin --title "Recent commits"
+
+# Send to a specific chat ID (overrides the default)
+bash ~/scripts/tg-send --chat-id 123456789 "Direct to a specific user"
+
+# With Markdown formatting
+bash ~/scripts/tg-send --parse-mode Markdown "*Build complete* — _42 tests passed_"
+```
+
+Long messages (over ~3800 characters) are automatically split at paragraph or line boundaries and sent as multiple sequential `[1/N]`-prefixed messages.
+
+### Node.js usage
+
+For projects that already have access to the relay's `lib/`, the same functionality is available as a module:
+
+```javascript
+const { sendMessage } = require('./lib/send-message');
+
+// Simple
+await sendMessage('Hello from Node');
+
+// With options
+const messageIds = await sendMessage('Build #42 finished', {
+  title: '✅ Deploy complete',
+  parseMode: 'Markdown',
+  chatId: 123456789, // optional, defaults to first ALLOWED_USER_IDS entry
+});
+
+console.log(`Sent message_ids: ${messageIds.join(', ')}`);
+```
+
+The `sendMessage` function returns an array of Telegram `message_id`s (one per chunk for long messages). It throws on failure with a descriptive error.
+
+### Default chat ID resolution
+
+The script picks the recipient in this order:
+
+1. `--chat-id` flag (shell) or `options.chatId` (Node)
+2. `DEFAULT_CHAT_ID` environment variable (set in `.env` or your shell)
+3. **First ID** in the comma-separated `ALLOWED_USER_IDS` list (default for single-user setups)
+
+If none of those resolve to a valid numeric ID, the script exits with an error.
+
+### Common patterns
+
+**Cron job notifications:**
+```bash
+0 4 * * * /path/to/backup.sh && bash ~/scripts/tg-send "Nightly backup OK" || bash ~/scripts/tg-send "Nightly backup FAILED"
+```
+
+**Build/deploy hooks:**
+```bash
+# In .git/hooks/post-receive or your CI script
+bash ~/scripts/tg-send --title "Deployed" "$(git log -1 --format='%h %s')"
+```
+
+**Pipe a generated report:**
+```bash
+my-status-script.sh | bash ~/scripts/tg-send --stdin --title "Daily status"
+```
+
+**From a Claude Code session (when explicitly asked):**
+```bash
+# Claude Code agents can call this directly when the user requests a notification
+bash ~/scripts/tg-send "Done with the migration. 47 records updated, 0 errors."
+```
+
+### Security note
+
+Anyone who can execute `send-message.sh` on your server can send messages from your bot. The script reads the bot token from your `.env` file (which is gitignored). Don't expose this script over the network, and don't share `.env` contents. The default chat ID restriction means messages only go to allowed users, but a malicious caller with `--chat-id` could send to any user ID — so treat the script the same way you'd treat the `.env` file itself: server-local, owner-readable.
 
 ## Managing the Service
 
