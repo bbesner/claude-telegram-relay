@@ -9,6 +9,12 @@ const suites = [
   'test-session-manager.js',
   'test-commands.js',
   'test-bot-smoke.js',
+  'test-formatter.js',
+  'test-send-message.js',
+  'test-openclaw-memory.js',
+  'test-memory-command.js',
+  'test-callbacks.js',
+  'test-session-exporter.js',
 ];
 
 const t0 = Date.now();
