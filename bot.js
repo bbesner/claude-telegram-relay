@@ -1,4 +1,8 @@
-require('dotenv').config();
+// quiet: true suppresses the "[dotenv@17.x.x] injected env (N) from .env"
+// startup line that dotenv 17 prints by default. Our logs are already JSON-
+// structured via lib/logger, so we don't want an unstructured line leaking
+// into pm2's stdout stream.
+require('dotenv').config({ quiet: true });
 
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
