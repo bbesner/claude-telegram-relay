@@ -23,7 +23,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "dotenv": "^16.4.0",
+    "dotenv": "^17.4.1",
     "node-telegram-bot-api": "^0.66.0"
   }
 }
