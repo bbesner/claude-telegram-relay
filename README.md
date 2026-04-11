@@ -90,6 +90,7 @@ All configuration lives in `.env` (created by the installer):
 | `OPENCLAW_CONFIG_PATH` | No | `~/.openclaw/openclaw.json` | v1.4.0+: path to OpenClaw config for the `/memory` command. Leave empty to auto-detect; `/memory` is silently disabled if no OpenClaw is found. |
 | `OPENCLAW_BIN` | No | `openclaw` (on PATH) | v1.4.0+: path to the `openclaw` binary |
 | `OPENCLAW_CWD` | No | config parent dir | v1.4.0+: working directory for the openclaw subprocess |
+| `OPENCLAW_SEARCH_TIMEOUT_MS` | No | `90000` | v1.4.0+: timeout (ms) for `/memory` searches. Cold queries on a large semantic index can take 30–90s the first time. |
 | `DEFAULT_CHAT_ID` | No | first `ALLOWED_USER_IDS` entry | v1.3.0+: default recipient for outbound `tg-send` / `sendMessage` calls |
 
 Find your Telegram user ID by messaging [@userinfobot](https://t.me/userinfobot).

@@ -15,6 +15,7 @@ const suites = [
   'test-memory-command.js',
   'test-callbacks.js',
   'test-session-exporter.js',
+  'test-export-command.js',
 ];
 
 const t0 = Date.now();
