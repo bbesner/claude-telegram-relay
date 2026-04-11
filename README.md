@@ -36,6 +36,8 @@ The relay is a pure message shuttle — **zero AI tokens** are consumed by the r
 - PM2 (`npm install -g pm2`)
 - A Telegram bot token from [@BotFather](https://t.me/BotFather)
 
+> If you use the bootstrap installer (v1.5.0+, see below), it will detect and install any of these prerequisites for you automatically — the only thing you need to do by hand is talk to BotFather to create the bot (since that's inherently a phone step).
+
 ## Quick Start
 
 ### 1. Create a Telegram bot

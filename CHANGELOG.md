@@ -7,6 +7,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.5.0] — 2026-04-11
+
+Closes the installer and lifecycle loop: new users get a one-line
+install command for Claude Code, and existing users get in-bot
+notifications when new releases ship.
+
+### Added
+
+- **`BOOTSTRAP.md`** — AI-driven bootstrap installer. Users paste a single line into Claude Code:
+  ```
+  Read and follow https://raw.githubusercontent.com/bbesner/claude-telegram-relay/main/BOOTSTRAP.md
+  ```
+  Claude Code fetches the document, recognizes it as an installer script, and walks the user through six phases:
+  1. Silent environment detection (Node, PM2, Claude CLI, existing install, optional OpenClaw)
+  2. Plain-English summary of what was found
+  3. Questionnaire (bot token, Telegram user ID, working directory, optional OpenClaw wiring)
+  4. Installation (clone + `install.sh` with flags)
+  5. Verification (PM2 status, clean startup log, mandatory phone round-trip test)
+  6. Orientation (command list, management commands, config file location)
+
+  Install-only for v1.5.0 — bootstrap-driven upgrade path is a future release.
+
+- **`lib/update-checker.js`** — In-bot release notifier. Runs once on startup (async, non-blocking) and every 24 hours thereafter. Fetches GitHub's `/releases/latest`, compares `tag_name` with the local `VERSION` file, and sends a one-time Telegram message to the admin when a newer version is published.
+  - Notification includes the full GitHub release body (truncated to 2500 chars), a direct link, and the bootstrap URL as the upgrade instruction
+  - Idempotent: state persisted in `~/.claude-telegram-relay/update-check.json` so the same version is never announced twice
+  - Fails silently on network errors, GitHub 404s, and rate limits
+  - Never auto-upgrades — just notifies
+  - Opt out with `UPDATE_CHECK=false` in `.env`
+  - Zero new dependencies (native `https`)
+
+- **`install.sh --openclaw-config <path>`** — New flag that writes `OPENCLAW_CONFIG_PATH` and auto-derives `OPENCLAW_CWD` into the generated `.env`. Used by BOOTSTRAP.md to wire `/memory` in a single install.sh invocation when the user has OpenClaw detected.
+
+- **`UPDATE_CHECK` env var** — Toggles the update notifier. Default `true`. Documented in `config/env.example` and README Configuration table.
+
+- **`test/test-update-checker.js`** — 54 assertions covering `parseVersion`, `isNewer`, state persistence, `formatNotification` HTML escaping, long-body truncation, the full `runCheck` state machine, and `UPDATE_CHECK=false` opt-out.
+
+### Changed
+
+- `bot.js` now starts the update checker inside `bot.getMe().then()` after `setMyCommands` publishes, passing the first `ALLOWED_USER_IDS` entry as the admin recipient.
+- `test/test-bot-smoke.js` sets `UPDATE_CHECK=false` so the smoke test doesn't hit the real GitHub API.
+- README Quick Start now leads with the bootstrap as the recommended install path; manual `install.sh` remains documented as an alternative.
+
+### Security
+
+- **Removed the author's real Telegram bot token from `BOOTSTRAP.md`** (commit `c4c09a5`). Earlier in the v1.5.0 commit (`8bc3b36`), the BotFather instructions used the author's actual token as a "this is what a token looks like" example, which GitGuardian flagged within 60 seconds of publication. Token was rotated via BotFather's `/revoke` (old token is permanently dead), and the example was replaced with an obviously-fake placeholder (`1234567890:ABCdef...`) plus explicit text clarifying it is not a real token. Not rewriting git history — the leaked token is a dead string and fix-forward is the standard response.
+
+### Tests
+
+- Test suite: 12 suites, **397 assertions**, ~800ms. Zero new dependencies.
+
+---
+
+## [1.4.0] — 2026-04-11
+
+Bundles four mobile-UX improvements for daily use, plus closes the
+v1.3.0 `send-message.js` test coverage gap.
+
+### Added
+
+- **Syntax-highlighted code blocks in `lib/formatter.js`** — Fenced code blocks with a language hint (` ```python `, ` ```bash `, etc.) are now emitted as `<pre><code class="language-X">`, which Telegram clients render with native syntax coloring. Whitelist of ~30 languages + common aliases (`js` → javascript, `py` → python, `sh` → bash, `yml` → yaml). Unknown languages fall back to plain `<pre>`. XSS protection (HTML escape of block contents) preserved.
+
+- **`/memory <query>` — OpenClaw memory search passthrough (`lib/openclaw-memory.js`)** — Runs `openclaw memory search <query> --max-results 5 --json` as a subprocess and renders the top results in a phone-readable format. **Zero AI tokens, no Claude round-trip.** Auto-detection:
+  1. `OPENCLAW_CONFIG_PATH` env var (explicit override)
+  2. `~/.openclaw/openclaw.json` (default install location)
+
+  Binary and cwd independently configurable via `OPENCLAW_BIN` and `OPENCLAW_CWD`. If OpenClaw isn't detected, `/memory` is silently not registered — standalone users never see it. Query passed via argv (no shell interpolation, no injection risk). Results HTML-escaped. Long snippets truncated at 300 chars.
+
+- **Inline keyboard buttons (`lib/callbacks.js`)** — Every Claude response ends with tappable `[+ New]  [💾 Save]  [ℹ Info]` buttons, attached to the **last chunk only**:
+  - `+ New` — calls `/new` (clears session)
+  - `💾 Save` — uses Telegram's ForceReply to prompt for a label, then labels the current session (5-minute prompt TTL)
+  - `ℹ Info` — sends the same payload as `/info`
+
+  Controlled by `INLINE_KEYBOARDS=true|false` (default: `true`). Callback-data strings kept ≤16 bytes (Telegram's hard cap is 64).
+
+- **`/export` — session-to-Markdown (`lib/session-exporter.js`)** — Dumps the active session's JSONL transcript as a clean Markdown document with timestamped user and assistant turns, tool-use lines condensed per-tool (Read/Edit/Write show `file_path`, Bash shows `command`, Grep shows `pattern`, etc.), and truncated tool results as blockquoted code. Sent back as a Telegram document attachment. User entries that are only `tool_result` echoes are deduplicated.
+
+- **New env vars** in `config/env.example` and the README Configuration table:
+  - `INLINE_KEYBOARDS` (default: `true`)
+  - `OPENCLAW_CONFIG_PATH` (default: auto-detect from `~/.openclaw/openclaw.json`)
+  - `OPENCLAW_BIN` (default: `openclaw` from PATH)
+  - `OPENCLAW_CWD` (default: config parent dir)
+  - `OPENCLAW_SEARCH_TIMEOUT_MS` (default: `90000` — see 1.4.0 follow-up fix below)
+
+- **New test suites**:
+  - `test/test-formatter.js` — 45 assertions
+  - `test/test-openclaw-memory.js` — 40 assertions
+  - `test/test-memory-command.js` — 14 assertions
+  - `test/test-callbacks.js` — 34 assertions
+  - `test/test-session-exporter.js` — 48 assertions
+  - `test/test-export-command.js` — 14 assertions
+  - `test/test-send-message.js` — 39 assertions (closes the v1.3.0 coverage gap)
+
+### Fixed
+
+- **`/memory` cold-cache timeout** — Earlier v1.4.0 shipped with a 15-second default timeout for `searchMemory`, which was too short for the first query after a bot restart against a large semantic memory index (e.g. Ari's Gemini+LanceDB setup legitimately takes 30–90s on cold warmup). Bumped default to 90 seconds, added `OPENCLAW_SEARCH_TIMEOUT_MS` env var, and made the typing indicator refresh every 4s during the wait so users see continuous feedback instead of a frozen chat.
+
+- **`/export` `.md` files unopenable on Android** — `.md` has no default MIME handler on Android's share sheet, so tapping the exported file offered no text viewers. Fixed by sending the document with `filename: session-XXXXXXXX.txt` and `contentType: 'text/plain'`. File contents are still Markdown — anyone who wants to render them can rename the extension — but on the chat itself, tapping the attachment now routes through Android's native text viewer.
+
+### Changed
+
+- `/help` and `/start` conditionally list `/memory` only when OpenClaw is detected.
+- `bot.js` conditionally appends `/memory` to the `setMyCommands` array when OpenClaw is detected, so the native Telegram menu stays clean for standalone users.
+- `sendChunkedResponse` in `bot.js` now attaches the inline keyboard to the last chunk of a multi-chunk response only.
+
+### Tests
+
+- Test suite: 11 suites, **343 assertions**, ~800ms. Zero new dependencies.
+
+---
+
 ## [1.3.0] — 2026-04-11
 
 ### Added
@@ -55,12 +165,36 @@ The script reads the bot token from your gitignored `.env` file. Anyone who can 
 
 ## [1.2.0] — 2026-04-10
 
-Pre-changelog release. See `git log v1.1.0..v1.2.0` for details.
+Session browser, cross-interface resume, session labeling, native command menu.
+
+### Added
+
+- **`/sessions`** — Lists up to 20 recent Claude Code sessions across all project buckets in `~/.claude/projects/`, newest first, with 📱 marker for relay-started sessions.
+- **`/resume <n|id|partial|label>`** — Resumes any session by list index, full/partial UUID, or saved label (case-insensitive).
+- **`/save <name>`** — Labels the current session under `sessions._named` for instant recall later. Labels survive `/new`, bot restarts, and even rollbacks.
+- **`/info`** — Now shows full session UUID plus a `Resumed:` timestamp when a session was resumed.
+- **Native Telegram command menu** — `bot.setMyCommands` publishes the full command list to Telegram on startup, so users get a `/` autocomplete dropdown and a populated Menu button without any BotFather configuration.
+- **Initial test suite** — 106 hermetic assertions across 4 suites covering session browser, session manager, command handlers, and bot startup.
+- **CI** — GitHub Actions workflow matrix-testing Node 18/20/22 on every push and PR.
+- **`package.json` metadata** — `repository`, `bugs`, `homepage`, `engines: {node: ">=18"}`.
+
+See [v1.2.0 release notes](https://github.com/bbesner/claude-telegram-relay/releases/tag/v1.2.0) for the full details.
 
 ## [1.1.0] — 2026-04-09
 
-Pre-changelog release.
+FlipClaw rename, documentation polish, and contributor hygiene.
+
+See [git log v1.0.0..v1.1.0](https://github.com/bbesner/claude-telegram-relay/compare/v1.0.0...v1.1.0) for details.
 
 ## [1.0.0] — 2026-04-08
 
-Initial public release.
+Initial public release. Core features:
+
+- Telegram → Claude Code CLI message relay via polling
+- Bot token + allowed user IDs authorization
+- Per-chat session persistence in `~/.claude-telegram-relay/sessions.json`
+- Markdown → Telegram HTML formatter
+- Long-message chunking
+- Media support (photos, PDFs, documents)
+- Group chat `@mention` mode
+- PM2-managed service with `install.sh`
