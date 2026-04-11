@@ -1,0 +1,40 @@
+# Dependabot configuration
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # npm runtime + dev dependencies
+  # The project is deliberately minimal (just `dotenv` and `node-telegram-bot-api`),
+  # so PR volume from this should be very low. Runs weekly to pick up security
+  # releases quickly without spamming on every patch bump mid-week.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # GitHub Actions used in .github/workflows/ci.yml
+  # Keeps actions/checkout, actions/setup-node, etc. current so we don't get
+  # caught by a Node runtime deprecation cycle unprepared.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

@@ -1,0 +1,14 @@
+# Keep the blank-issue escape hatch off so reporters land on a structured template
+# and we don't end up debugging one-liner "it doesn't work" issues.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/bbesner/claude-telegram-relay/security/policy
+    about: Please report security issues privately — do not open a public issue. See SECURITY.md for the disclosure process.
+  - name: Claude Code CLI issues
+    url: https://github.com/anthropics/claude-code/issues
+    about: Bugs in the `claude` CLI itself (not the relay) should be reported upstream to Anthropic.
+  - name: Telegram Bot API questions
+    url: https://core.telegram.org/bots/api
+    about: Questions about the Telegram Bot API itself (not the relay) — Telegram's official docs.
