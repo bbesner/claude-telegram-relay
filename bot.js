@@ -60,6 +60,7 @@ if (isOpenclawAvailable()) {
 bot.getMe().then((me) => {
   botInfo = me;
   log.info('Bot started', { username: me.username, id: me.id });
+  log.info('claude-telegram-relay by Brad Besner (github.com/bbesner/claude-telegram-relay)');
 
   // Publish the command list to Telegram so users get a native / autocomplete.
   bot.setMyCommands(BOT_COMMANDS)
@@ -70,7 +71,7 @@ bot.getMe().then((me) => {
   if (process.env.SEND_STARTUP_MESSAGE === 'true') {
     const userIds = process.env.ALLOWED_USER_IDS.split(',').map(id => id.trim());
     for (const uid of userIds) {
-      bot.sendMessage(uid, `Claude Code Relay is online. (@${me.username})`).catch(() => {});
+      bot.sendMessage(uid, `Claude Code Relay is online. (@${me.username})\n\nBuilt by Brad Besner · https://github.com/bbesner/claude-telegram-relay`).catch(() => {});
     }
   }
 

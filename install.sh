@@ -228,3 +228,9 @@ if [[ -L "$WORKING_DIR/scripts/tg-send" ]]; then
   echo "    echo \"Build done\" | bash $WORKING_DIR/scripts/tg-send --stdin"
   echo ""
 fi
+echo -e "  ${CYAN}If this relay saves you time:${NC}"
+echo "  ★  Star it on GitHub — https://github.com/bbesner/claude-telegram-relay"
+echo "     It helps others find the project."
+echo ""
+echo "  Built by Brad Besner · Ultraweb Labs"
+echo ""

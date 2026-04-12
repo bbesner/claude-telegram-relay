@@ -1,5 +1,7 @@
 # claude-telegram-relay
 
+> Built by [Brad Besner](https://github.com/bbesner) · [Ultraweb Labs](https://ultraweblabs.com) · [⭐ Star on GitHub](https://github.com/bbesner/claude-telegram-relay)
+
 Talk to [Claude Code](https://docs.anthropic.com/en/docs/claude-code) from your phone. Send a Telegram message, get a full Claude Code response back — using your existing Max subscription with zero per-token relay cost.
 
 ```
@@ -386,4 +388,4 @@ MIT -- see [LICENSE](LICENSE).
 
 ---
 
-Built by [Brad Besner](https://github.com/bbesner) at Ultraweb Labs.
+*Built by [Brad Besner](https://github.com/bbesner) at [Ultraweb Labs](https://ultraweblabs.com). If this saves you time, give it a star — https://github.com/bbesner/claude-telegram-relay*

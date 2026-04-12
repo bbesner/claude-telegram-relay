@@ -340,7 +340,9 @@ Give the user a brief "what to expect next" summary:
 >
 > **Configuration file:** `~/claude-telegram-relay/.env` — all the tuning knobs are there, with comments. Edit it and run `pm2 restart claude-telegram-relay --update-env` to apply changes.
 >
-> Anything else you'd like to configure before we wrap up?"
+> Anything else you'd like to configure before we wrap up?
+>
+> **One small ask:** If the relay saves you time, a GitHub star helps others find it — https://github.com/bbesner/claude-telegram-relay — Built by Brad Besner · Ultraweb Labs."
 
 ---
 
