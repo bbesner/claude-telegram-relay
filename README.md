@@ -17,6 +17,7 @@ The relay is a pure message shuttle — **zero AI tokens** are consumed by the r
 - **Session browser** — `/sessions` lists all recent Claude Code sessions across every interface (Desktop, VS Code, Telegram) so you can pick up any thread from your phone
 - **Cross-interface resume** — `/resume <n>` jumps into any session by number, ID, or saved label — even sessions started outside Telegram
 - **Session labeling** — `/save <name>` labels the current session for instant recall later
+- **Live status while Claude works (v1.7.0+)** — instead of a silent typing dot, you see a single message that updates in place as Claude works: **🤔 Thinking…** → **📖 Using Read /path/to/file.js** → **📝 Replying…** → the final answer. Tool-heavy tasks feel dramatically more responsive on a phone. Opt out with `STREAMING=false` in `.env` to fall back to the v1.6.0 synchronous path.
 - **Session continuity** — conversations persist across messages using `--resume`, and as of v1.6.0 the relay performs a resume preflight and never silently swaps a broken session for a fresh one — if your session can't be resumed, you get an explicit warning with `/new` and `/sessions` recovery options
 - **In-flight cancellation (v1.6.0+)** — `/interrupt` (or `/stop`, `/cancel`) kills the running Claude subprocess without touching your session, so you can abort a task that's gone off the rails
 - **Cost visibility (v1.6.0+)** — `/cost` and the enriched `/info` surface per-turn and cumulative `total_cost_usd` straight from Claude's JSON output
@@ -107,6 +108,7 @@ All configuration lives in `.env` (created by the installer):
 | `OPENCLAW_SEARCH_TIMEOUT_MS` | No | `90000` | v1.4.0+: timeout (ms) for `/memory` searches. Cold queries on a large semantic index can take 30–90s the first time. |
 | `DEFAULT_CHAT_ID` | No | first `ALLOWED_USER_IDS` entry | v1.3.0+: default recipient for outbound `tg-send` / `sendMessage` calls |
 | `UPDATE_CHECK` | No | `true` | v1.5.0+: notify the admin on Telegram when a new release is published on GitHub. Checks once at startup, then every 24h. Never auto-upgrades — just sends a message with release notes and a link. Set to `false` to disable. |
+| `STREAMING` | No | `true` | v1.7.0+: show live status (🤔 Thinking → 📖 Using Read → 📝 Replying) by editing a single Telegram message as Claude works. Set to `false` to fall back to the v1.6.0 synchronous path. |
 
 Find your Telegram user ID by messaging [@userinfobot](https://t.me/userinfobot).
 

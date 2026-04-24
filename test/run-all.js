@@ -10,6 +10,8 @@ const suites = [
   'test-session-metadata.js',
   'test-session-preflight.js',
   'test-interrupt.js',
+  'test-stream-claude.js',
+  'test-stream-renderer.js',
   'test-commands.js',
   'test-bot-smoke.js',
   'test-formatter.js',
