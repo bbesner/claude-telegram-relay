@@ -8,8 +8,9 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 const { isAuthorized } = require('./lib/auth');
-const { invokeClaude } = require('./lib/claude-cli');
+const { invokeClaude, streamClaude } = require('./lib/claude-cli');
 const { formatResponse } = require('./lib/formatter');
+const { createRenderer } = require('./lib/stream-renderer');
 const {
   getSession,
   setSession,
@@ -140,12 +141,17 @@ bot.on('message', async (msg) => {
   const chatKey = sessionKey(msg);
   const chatId = msg.chat.id;
 
+  // v1.7.0: streaming is on by default. Set STREAMING=false in .env to fall
+  // back to the v1.6.0 synchronous invokeClaude path (a useful escape hatch
+  // if stream-json ever changes shape in a future Claude Code release).
+  const STREAMING = (process.env.STREAMING || 'true').toLowerCase() !== 'false';
+
   try {
     await enqueue(chatKey, async () => {
-      // Send typing indicator
+      // Pre-stream typing indicator. Once the renderer seeds a message the
+      // "typing" action is redundant, but the user sees SOMETHING immediately
+      // in the ~200ms before the first event arrives.
       bot.sendChatAction(chatId, 'typing').catch(() => {});
-
-      // Keep typing indicator alive for long requests
       const typingInterval = setInterval(() => {
         bot.sendChatAction(chatId, 'typing').catch(() => {});
       }, 4000);
@@ -212,13 +218,41 @@ bot.on('message', async (msg) => {
           hasMedia: !!mediaInfo,
         });
 
-        const response = await invokeClaude(prompt, {
-          sessionId: session?.sessionId,
-          model: model || undefined,
-          chatKey: chatKeyLocal,
-        });
+        // v1.7.0: use the streaming path for chat messages; renderer owns
+        // the seed message + live edits. Pass-through commands and media
+        // messages reuse this same path — they all benefit from a visible
+        // "Claude is reading…" indicator.
+        let renderer = null;
+        let response;
+        if (STREAMING) {
+          renderer = createRenderer(bot, chatId, {
+            replyTo: msg.message_id,
+            keyboardBuilder: () => buildResponseKeyboard(),
+          });
+          response = await streamClaude(prompt, {
+            sessionId: session?.sessionId,
+            model: model || undefined,
+            chatKey: chatKeyLocal,
+            onEvent: (evt) => renderer.onEvent(evt),
+          });
+        } else {
+          response = await invokeClaude(prompt, {
+            sessionId: session?.sessionId,
+            model: model || undefined,
+            chatKey: chatKeyLocal,
+          });
+        }
 
         clearInterval(typingInterval);
+
+        // v1.7.0: route error text through the renderer so the live seed
+        // message gets replaced with the explanation instead of leaving a
+        // "Thinking…" placeholder behind. When STREAMING is off, the
+        // renderer is null and we fall back to sendMessage.
+        const sendError = async (htmlBody) => {
+          if (renderer) await renderer.finalizeError(htmlBody);
+          else          await bot.sendMessage(chatId, htmlBody, { parse_mode: 'HTML' });
+        };
 
         if (response.error) {
           // v1.6.0: never silently swap to a fresh session. If resume failed,
@@ -230,25 +264,23 @@ bot.on('message', async (msg) => {
 
           if (response.interrupted) {
             markSessionError(msg, 'interrupted by user', { kind: 'error' });
-            await bot.sendMessage(chatId,
+            await sendError(
               `⏹ <b>Request cancelled.</b> Claude was stopped before it finished. ` +
-              `Your session is unchanged; send a new message to continue.`,
-              { parse_mode: 'HTML' }
+              `Your session is unchanged; send a new message to continue.`
             );
             return;
           }
 
           if (response.timedOut) {
-            markSessionError(msg, `timeout after ${Math.round((parseInt(process.env.CLAUDE_TIMEOUT_MS || '120000', 10)) / 1000)}s`, { kind: 'timeout' });
             const timeoutSec = Math.round((parseInt(process.env.CLAUDE_TIMEOUT_MS || '120000', 10)) / 1000);
-            await bot.sendMessage(chatId,
+            markSessionError(msg, `timeout after ${timeoutSec}s`, { kind: 'timeout' });
+            await sendError(
               `⌛ <b>Timed out after ${timeoutSec}s.</b>\n\n` +
               `The task was <b>terminated</b> — it is <i>not</i> still running in the background. ` +
               `Anything Claude was mid-way through (edits, commands, tool calls) may be in a partial state.\n\n` +
               `• Try again with a smaller scope, or\n` +
               `• Increase <code>CLAUDE_TIMEOUT_MS</code> in <code>.env</code> if you expect this to take longer.\n\n` +
-              `Your session is preserved — send another message to continue.`,
-              { parse_mode: 'HTML' }
+              `Your session is preserved — send another message to continue.`
             );
             return;
           }
@@ -260,21 +292,20 @@ bot.on('message', async (msg) => {
               sessionId: session.sessionId.slice(0, 8),
               error: response.error,
             });
-            await bot.sendMessage(chatId,
+            await sendError(
               `<b>⚠ Couldn't resume your previous session</b>\n\n` +
               `Session <code>${session.sessionId.slice(0, 8)}</code> failed to resume:\n` +
               `<code>${escapeForHtml(response.error).slice(0, 300)}</code>\n\n` +
               `Prior context is <b>not</b> guaranteed. Choose one:\n` +
               `• <code>/new</code> — drop this session and start fresh\n` +
               `• <code>/sessions</code> then <code>/resume &lt;n&gt;</code> — pick a different thread\n\n` +
-              `Nothing was sent to a new session automatically.`,
-              { parse_mode: 'HTML' }
+              `Nothing was sent to a new session automatically.`
             );
             return;
           }
 
           markSessionError(msg, response.error, { kind: 'error' });
-          await bot.sendMessage(chatId, `Error: ${response.error}`);
+          await sendError(`Error: ${escapeForHtml(response.error)}`);
           return;
         }
 
@@ -285,8 +316,13 @@ bot.on('message', async (msg) => {
         // Record cost (v1.6.0) for /cost reporting
         recordCost(msg, response.cost);
 
-        // Send text response
-        await sendChunkedResponse(chatId, response.result, msg.message_id);
+        // Send text response — streaming path swaps the seed placeholder for
+        // the formatted answer; non-streaming path uses the old chunking fn.
+        if (renderer) {
+          await renderer.finalize({ text: response.result || '' });
+        } else {
+          await sendChunkedResponse(chatId, response.result, msg.message_id);
+        }
 
         // Check if Claude created any files and send them back
         const createdFiles = extractCreatedFiles(response.result);
@@ -312,6 +348,8 @@ bot.on('message', async (msg) => {
           cost: response.cost,
           responseLength: response.result?.length,
           filesSent: createdFiles.length,
+          streamed: !!renderer,
+          toolsUsed: response.toolsUsed || [],
         });
       } finally {
         clearInterval(typingInterval);
