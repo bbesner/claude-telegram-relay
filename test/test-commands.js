@@ -144,6 +144,43 @@ const sm = require('../lib/session-manager');
   ok('/resume 99 -> could not find',
      out.some(r => r.text.includes('Could not find a session matching')));
 
+  // ---- v1.6.0: /info enrichment ----
+  // Seed the state with a degraded session + cost to exercise the new fields.
+  sm.setSession(dm(500), 'abcd1234-ab12-ab12-ab12-abcdef123456');
+  sm.markSessionError(dm(500), 'previous resume failed at boot', { kind: 'resume-failed' });
+  sm.recordCost(dm(500), 0.0123);
+  out = await fire('/info');
+  ok('/info shows Status line',
+     out.some(r => /Status: /.test(r.text)));
+  ok('/info shows degraded status',
+     out.some(r => r.text.includes('degraded')));
+  ok('/info shows Last error',
+     out.some(r => r.text.includes('Last error') && r.text.includes('previous resume failed')));
+  ok('/info shows Last resume failure timestamp',
+     out.some(r => r.text.includes('Last resume failure:')));
+  ok('/info shows cost fields',
+     out.some(r => r.text.includes('Last turn cost: $0.0123')));
+
+  // ---- v1.6.0: /cost ----
+  out = await fire('/cost');
+  ok('/cost shows last-turn and session-total lines',
+     out.some(r => r.text.includes('Last turn: $0.0123') && r.text.includes('Session total:')));
+
+  out = await fire('/cost', 9001);
+  ok('/cost on fresh user says no active session',
+     out.some(r => r.text.includes('No active session')));
+
+  // ---- v1.6.0: /interrupt with nothing running ----
+  out = await fire('/interrupt');
+  ok('/interrupt with nothing running says so',
+     out.some(r => r.text.includes('No active Claude job')));
+  out = await fire('/stop');
+  ok('/stop alias also works',
+     out.some(r => r.text.includes('No active Claude job')));
+  out = await fire('/cancel');
+  ok('/cancel alias also works',
+     out.some(r => r.text.includes('No active Claude job')));
+
   // ---- /new ----
   out = await fire('/new');
   ok('/new confirmation',           out.some(r => r.text.includes('Session cleared')));

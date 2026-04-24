@@ -7,6 +7,9 @@ const path = require('path');
 const suites = [
   'test-session-browser.js',
   'test-session-manager.js',
+  'test-session-metadata.js',
+  'test-session-preflight.js',
+  'test-interrupt.js',
   'test-commands.js',
   'test-bot-smoke.js',
   'test-formatter.js',

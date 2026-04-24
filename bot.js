@@ -10,7 +10,15 @@ const path = require('path');
 const { isAuthorized } = require('./lib/auth');
 const { invokeClaude } = require('./lib/claude-cli');
 const { formatResponse } = require('./lib/formatter');
-const { getSession, setSession, getUserModel, sessionKey } = require('./lib/session-manager');
+const {
+  getSession,
+  setSession,
+  getUserModel,
+  sessionKey,
+  markSessionError,
+  recordCost,
+} = require('./lib/session-manager');
+const { sessionFileExists } = require('./lib/session-browser');
 const { enqueue } = require('./lib/message-queue');
 const { registerCommands, getPassthroughPrompt, isOpenclawAvailable } = require('./lib/commands');
 const { registerCallbackHandlers, buildResponseKeyboard, handleSaveReplyIfPresent } = require('./lib/callbacks');
@@ -44,6 +52,8 @@ const BOT_COMMANDS = [
   { command: 'save',     description: 'Label the current session for easy recall' },
   { command: 'new',      description: 'Clear session, start a fresh conversation' },
   { command: 'info',     description: 'Show current session ID, messages, uptime' },
+  { command: 'cost',     description: 'Show cost for the current session' },
+  { command: 'interrupt',description: 'Cancel the in-flight Claude request' },
   { command: 'export',   description: 'Export current session as a Markdown file' },
   { command: 'model',    description: 'Show or set model (sonnet, opus, haiku)' },
   { command: 'status',   description: 'Full server status (PM2, disk, memory)' },
@@ -143,6 +153,31 @@ bot.on('message', async (msg) => {
       try {
         const session = getSession(msg);
         const model = getUserModel(msg);
+        const chatKeyLocal = sessionKey(msg);
+
+        // v1.6.0 preflight: if we think we have an active session but the
+        // JSONL file is gone (Claude cleanup, external rm, bad state), warn
+        // the user BEFORE we spawn Claude. This avoids the common "resume
+        // silently fails, bot silently starts fresh" trap.
+        if (session?.sessionId && !sessionFileExists(session.sessionId)) {
+          log.warn('Resume preflight: session file missing', {
+            chatId,
+            sessionId: session.sessionId.slice(0, 8),
+          });
+          markSessionError(msg, 'session file missing at preflight', { kind: 'resume-failed' });
+          clearInterval(typingInterval);
+          await bot.sendMessage(chatId,
+            `<b>⚠ Previous session can no longer be resumed</b>\n\n` +
+            `Session <code>${session.sessionId.slice(0, 8)}</code> is no longer on disk — ` +
+            `its transcript has been removed or is unreadable. Prior context is <b>not</b> available.\n\n` +
+            `Choose one:\n` +
+            `• <code>/new</code> — start a fresh conversation (your message is not sent yet)\n` +
+            `• <code>/sessions</code> then <code>/resume &lt;n&gt;</code> — pick a different thread\n\n` +
+            `Then re-send your message.`,
+            { parse_mode: 'HTML' }
+          );
+          return;
+        }
 
         // Build prompt — handle pass-through commands, media, or plain text
         let prompt;
@@ -180,23 +215,65 @@ bot.on('message', async (msg) => {
         const response = await invokeClaude(prompt, {
           sessionId: session?.sessionId,
           model: model || undefined,
+          chatKey: chatKeyLocal,
         });
 
         clearInterval(typingInterval);
 
         if (response.error) {
-          // If resume failed, try without session
-          if (session?.sessionId && response.error.includes('session')) {
-            log.warn('Session resume failed, starting fresh', { error: response.error });
-            const retry = await invokeClaude(prompt, { model: model || undefined });
-            if (retry.error) {
-              await bot.sendMessage(chatId, `Error: ${retry.error}`);
-              return;
-            }
-            if (retry.sessionId) setSession(msg, retry.sessionId);
-            await sendChunkedResponse(chatId, retry.result, msg.message_id);
+          // v1.6.0: never silently swap to a fresh session. If resume failed,
+          // tell the user exactly what happened and let them pick a recovery.
+          const looksLikeResumeFail =
+            session?.sessionId &&
+            (response.error.toLowerCase().includes('session') ||
+             response.error.toLowerCase().includes('resume'));
+
+          if (response.interrupted) {
+            markSessionError(msg, 'interrupted by user', { kind: 'error' });
+            await bot.sendMessage(chatId,
+              `⏹ <b>Request cancelled.</b> Claude was stopped before it finished. ` +
+              `Your session is unchanged; send a new message to continue.`,
+              { parse_mode: 'HTML' }
+            );
             return;
           }
+
+          if (response.timedOut) {
+            markSessionError(msg, `timeout after ${Math.round((parseInt(process.env.CLAUDE_TIMEOUT_MS || '120000', 10)) / 1000)}s`, { kind: 'timeout' });
+            const timeoutSec = Math.round((parseInt(process.env.CLAUDE_TIMEOUT_MS || '120000', 10)) / 1000);
+            await bot.sendMessage(chatId,
+              `⌛ <b>Timed out after ${timeoutSec}s.</b>\n\n` +
+              `The task was <b>terminated</b> — it is <i>not</i> still running in the background. ` +
+              `Anything Claude was mid-way through (edits, commands, tool calls) may be in a partial state.\n\n` +
+              `• Try again with a smaller scope, or\n` +
+              `• Increase <code>CLAUDE_TIMEOUT_MS</code> in <code>.env</code> if you expect this to take longer.\n\n` +
+              `Your session is preserved — send another message to continue.`,
+              { parse_mode: 'HTML' }
+            );
+            return;
+          }
+
+          if (looksLikeResumeFail) {
+            markSessionError(msg, response.error, { kind: 'resume-failed' });
+            log.warn('Session resume failed — NOT auto-replacing', {
+              chatId,
+              sessionId: session.sessionId.slice(0, 8),
+              error: response.error,
+            });
+            await bot.sendMessage(chatId,
+              `<b>⚠ Couldn't resume your previous session</b>\n\n` +
+              `Session <code>${session.sessionId.slice(0, 8)}</code> failed to resume:\n` +
+              `<code>${escapeForHtml(response.error).slice(0, 300)}</code>\n\n` +
+              `Prior context is <b>not</b> guaranteed. Choose one:\n` +
+              `• <code>/new</code> — drop this session and start fresh\n` +
+              `• <code>/sessions</code> then <code>/resume &lt;n&gt;</code> — pick a different thread\n\n` +
+              `Nothing was sent to a new session automatically.`,
+              { parse_mode: 'HTML' }
+            );
+            return;
+          }
+
+          markSessionError(msg, response.error, { kind: 'error' });
           await bot.sendMessage(chatId, `Error: ${response.error}`);
           return;
         }
@@ -205,6 +282,8 @@ bot.on('message', async (msg) => {
         if (response.sessionId) {
           setSession(msg, response.sessionId);
         }
+        // Record cost (v1.6.0) for /cost reporting
+        recordCost(msg, response.cost);
 
         // Send text response
         await sendChunkedResponse(chatId, response.result, msg.message_id);
@@ -286,6 +365,14 @@ async function sendChunkedResponse(chatId, text, replyToId) {
       }
     }
   }
+}
+
+// v1.6.0: escape user-visible error text before embedding it in an HTML message.
+function escapeForHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // --- Graceful shutdown ---
