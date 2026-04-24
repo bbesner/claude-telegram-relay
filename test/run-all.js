@@ -12,6 +12,8 @@ const suites = [
   'test-interrupt.js',
   'test-stream-claude.js',
   'test-stream-renderer.js',
+  'test-job-manager.js',
+  'test-job-runner.js',
   'test-commands.js',
   'test-bot-smoke.js',
   'test-formatter.js',

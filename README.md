@@ -17,6 +17,7 @@ The relay is a pure message shuttle — **zero AI tokens** are consumed by the r
 - **Session browser** — `/sessions` lists all recent Claude Code sessions across every interface (Desktop, VS Code, Telegram) so you can pick up any thread from your phone
 - **Cross-interface resume** — `/resume <n>` jumps into any session by number, ID, or saved label — even sessions started outside Telegram
 - **Session labeling** — `/save <name>` labels the current session for instant recall later
+- **Durable background jobs (v1.8.0+)** — `/run <prompt>` kicks off a detached subprocess that survives the relay restarting. The bot messages you when it's done, including the full response, tools used, duration, and cost. Use for tasks that exceed the 8-minute synchronous window. Manage with `/jobs`, `/job <id>`, `/cancel <id>`.
 - **Live status while Claude works (v1.7.0+)** — instead of a silent typing dot, you see a single message that updates in place as Claude works: **🤔 Thinking…** → **📖 Using Read /path/to/file.js** → **📝 Replying…** → the final answer. Tool-heavy tasks feel dramatically more responsive on a phone. Opt out with `STREAMING=false` in `.env` to fall back to the v1.6.0 synchronous path.
 - **Session continuity** — conversations persist across messages using `--resume`, and as of v1.6.0 the relay performs a resume preflight and never silently swaps a broken session for a fresh one — if your session can't be resumed, you get an explicit warning with `/new` and `/sessions` recovery options
 - **In-flight cancellation (v1.6.0+)** — `/interrupt` (or `/stop`, `/cancel`) kills the running Claude subprocess without touching your session, so you can abort a task that's gone off the rails
@@ -109,6 +110,7 @@ All configuration lives in `.env` (created by the installer):
 | `DEFAULT_CHAT_ID` | No | first `ALLOWED_USER_IDS` entry | v1.3.0+: default recipient for outbound `tg-send` / `sendMessage` calls |
 | `UPDATE_CHECK` | No | `true` | v1.5.0+: notify the admin on Telegram when a new release is published on GitHub. Checks once at startup, then every 24h. Never auto-upgrades — just sends a message with release notes and a link. Set to `false` to disable. |
 | `STREAMING` | No | `true` | v1.7.0+: show live status (🤔 Thinking → 📖 Using Read → 📝 Replying) by editing a single Telegram message as Claude works. Set to `false` to fall back to the v1.6.0 synchronous path. |
+| `JOB_TIMEOUT_MS` | No | `3600000` | v1.8.0+: wall-clock cap for background jobs started via `/run`. Default 1 hour. |
 
 Find your Telegram user ID by messaging [@userinfobot](https://t.me/userinfobot).
 
@@ -130,6 +132,10 @@ All commands below are also available as a native Telegram autocomplete: tap `/`
 | `/info` | v1.6.0+: Session ID, status (🟢/🟡), last-error, last-resume-failure, cost, uptime |
 | `/cost` | v1.6.0+: Last-turn and cumulative cost for the current session |
 | `/interrupt` | v1.6.0+: Cancel the in-flight Claude request. Aliases: `/stop`, `/cancel` |
+| `/run <prompt>` | v1.8.0+: Start a durable background job that survives long-running tasks and the relay restarting. Delivers the result when done. |
+| `/jobs` | v1.8.0+: List recent background jobs for this chat |
+| `/job <id>` | v1.8.0+: Full details for one background job |
+| `/cancel <id>` | v1.8.0+: Cancel a running background job (SIGTERM) |
 | `/export` | v1.4.0+: Dump the current session as a Markdown file and send it as a document |
 | `/model [name]` | Show or set model override |
 | `/help` | List all commands |
