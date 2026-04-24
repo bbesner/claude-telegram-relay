@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] — 2026-04-24
+
+"Trust" release: the relay no longer silently swaps broken sessions for
+fresh ones, surfaces session continuity state clearly, and lets you
+cancel work that has gone off the rails. First of several releases laying
+the groundwork for durable long-running execution and live output
+streaming.
+
+### Added
+
+- **Resume preflight (`lib/session-browser.js:sessionFileExists`)** — before
+  spawning Claude with `--resume`, the relay checks that the session's
+  `.jsonl` still exists under `~/.claude/projects/`. If it's gone (external
+  cleanup, corruption, zero-byte file), the user is told explicitly that
+  prior context is unavailable and offered `/new` or `/sessions` — no
+  silent fresh start.
+- **`/interrupt` (aliases: `/stop`, `/cancel`)** — cancels the in-flight
+  Claude subprocess for the current chat without touching session state.
+  Backed by a per-chat registry in `lib/claude-cli.js` that holds the child
+  process reference until the invocation settles. Safe to call when
+  nothing is running — the bot just says so.
+- **`/cost`** — shows last-turn and cumulative `total_cost_usd` for the
+  current session, pulled straight from Claude CLI's JSON output. Free on
+  Max subscriptions, real amounts for API-key runs.
+- **Enriched `/info`** — now shows session status (🟢 active / 🟡 degraded),
+  whether the transcript is still on disk, last-success timestamp,
+  last-error text + timestamp, last-resume-failure timestamp,
+  replaced-previous-session id, and cost totals. Also shows active job +
+  elapsed time when something is running.
+- **New session metadata fields** in `~/.claude-telegram-relay/sessions.json`:
+  `status`, `lastSuccessAt`, `lastError`, `lastErrorAt`,
+  `lastResumeFailedAt`, `replacedPreviousSessionId`, `replacedReason`,
+  `replacedAt`, `lastCostUsd`, `totalCostUsd`. Schema is additive — older
+  state files load cleanly.
+- **`markSessionError`, `replaceSession`, `recordCost`** helpers on
+  `lib/session-manager.js` so future features (job model, recovery flow)
+  reuse the same continuity vocabulary.
+- **Structured transition logs** at `warn`/`info` for: preflight-miss,
+  resume-failed-without-replace, timeout-kill, and subprocess-interrupt.
+  All carry `chatId`, `sessionId`, and where relevant `elapsedMs` /
+  `timeoutMs` so pm2 logs tell the full continuity story.
+- **Tests (+~55 assertions, 3 new hermetic suites)**:
+  - `test/test-session-preflight.js` — `sessionFileExists` happy path,
+    invalid input, zero-byte files, missing projects dir.
+  - `test/test-session-metadata.js` — `markSessionError`, `replaceSession`,
+    `recordCost` round-trips + persistence.
+  - `test/test-interrupt.js` — real child-process interrupt via a fake
+    `claude` binary; verifies `invokeClaude()` resolves with
+    `{ interrupted: true }` within seconds of `interruptJob()`.
+
+### Changed
+
+- **`bot.js`: removed the silent fresh-session fallback.** On resume
+  failure the relay now sends an explicit warning with recovery options;
+  nothing is re-sent to a new session automatically. This is the single
+  biggest trust fix in the release.
+- **`bot.js`: timeout handling** — user-facing message explains the task
+  was terminated (not running in the background), names the timeout, and
+  points at `CLAUDE_TIMEOUT_MS` for tuning.
+- **`lib/claude-cli.js`: `invokeClaude()` return shape** — now includes
+  `timedOut` and `interrupted` booleans so the caller can pick the right
+  user-facing copy without string-matching error text. Back-compatible for
+  existing fields (`result`, `sessionId`, `cost`, `error`).
+- **`lib/commands.js`: lazy-load `claude-cli`** — keeps `commands.js`
+  requireable in environments and test runs where the `claude` binary
+  isn't on PATH.
+- **Bot command menu** registers `/cost` and `/interrupt` so they appear
+  in the native `/` autocomplete.
+
+### Tests
+
+- Test suite: 15 suites, ~455 assertions, ~1s. Zero new dependencies.
+
+---
+
 ## [1.5.0] — 2026-04-11
 
 Closes the installer and lifecycle loop: new users get a one-line

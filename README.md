@@ -17,7 +17,9 @@ The relay is a pure message shuttle — **zero AI tokens** are consumed by the r
 - **Session browser** — `/sessions` lists all recent Claude Code sessions across every interface (Desktop, VS Code, Telegram) so you can pick up any thread from your phone
 - **Cross-interface resume** — `/resume <n>` jumps into any session by number, ID, or saved label — even sessions started outside Telegram
 - **Session labeling** — `/save <name>` labels the current session for instant recall later
-- **Session continuity** — conversations persist across messages using `--resume`
+- **Session continuity** — conversations persist across messages using `--resume`, and as of v1.6.0 the relay performs a resume preflight and never silently swaps a broken session for a fresh one — if your session can't be resumed, you get an explicit warning with `/new` and `/sessions` recovery options
+- **In-flight cancellation (v1.6.0+)** — `/interrupt` (or `/stop`, `/cancel`) kills the running Claude subprocess without touching your session, so you can abort a task that's gone off the rails
+- **Cost visibility (v1.6.0+)** — `/cost` and the enriched `/info` surface per-turn and cumulative `total_cost_usd` straight from Claude's JSON output
 - **Native command menu** — all commands auto-register with Telegram on startup, so tapping `/` in the chat shows a full autocomplete dropdown and populates the Menu button
 - **Group chat support** — add the bot to groups alongside other bots; responds to @mentions
 - **Message queuing** — sequential per-chat processing prevents race conditions
@@ -123,7 +125,9 @@ All commands below are also available as a native Telegram autocomplete: tap `/`
 | `/save <name>` | Label the current session (e.g. `/save sck-migration`) |
 | `/start` | Welcome message and command list |
 | `/new` | Clear session, start a fresh conversation |
-| `/info` | Show session ID, message count, uptime |
+| `/info` | v1.6.0+: Session ID, status (🟢/🟡), last-error, last-resume-failure, cost, uptime |
+| `/cost` | v1.6.0+: Last-turn and cumulative cost for the current session |
+| `/interrupt` | v1.6.0+: Cancel the in-flight Claude request. Aliases: `/stop`, `/cancel` |
 | `/export` | v1.4.0+: Dump the current session as a Markdown file and send it as a document |
 | `/model [name]` | Show or set model override |
 | `/help` | List all commands |
@@ -174,7 +178,8 @@ Each group gets its own independent Claude session. You can have the bot in a gr
 - Each chat (DM or group) maintains its own Claude Code session
 - Sessions persist across bot restarts (stored in `~/.claude-telegram-relay/sessions.json`)
 - Use `/new` to start a fresh conversation
-- If a session becomes corrupted, the bot automatically starts a fresh one
+- If a session can't be resumed (transcript missing, Claude returned a resume error), the bot **does not** silently swap to a fresh one. You get an explicit warning with `/new` or `/sessions` recovery options (v1.6.0+)
+- Per-session health shows up in `/info`: 🟢 active / 🟡 degraded, last success time, last error, last resume-failure time, and any previous session that was replaced
 
 ### Cross-Interface Session Sharing
 
