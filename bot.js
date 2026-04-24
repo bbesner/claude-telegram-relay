@@ -21,7 +21,8 @@ const {
 } = require('./lib/session-manager');
 const { sessionFileExists } = require('./lib/session-browser');
 const { enqueue } = require('./lib/message-queue');
-const { registerCommands, getPassthroughPrompt, isOpenclawAvailable } = require('./lib/commands');
+const { registerCommands, getPassthroughPrompt, isOpenclawAvailable, notifyCompletion } = require('./lib/commands');
+const jobRunner = require('./lib/job-runner');
 const { registerCallbackHandlers, buildResponseKeyboard, handleSaveReplyIfPresent } = require('./lib/callbacks');
 const { downloadTelegramFile, extractMediaInfo, buildMediaPrompt, extractCreatedFiles } = require('./lib/media');
 const { startPeriodicCheck: startUpdateCheck } = require('./lib/update-checker');
@@ -55,6 +56,9 @@ const BOT_COMMANDS = [
   { command: 'info',     description: 'Show current session ID, messages, uptime' },
   { command: 'cost',     description: 'Show cost for the current session' },
   { command: 'interrupt',description: 'Cancel the in-flight Claude request' },
+  { command: 'run',      description: 'Start a background job (survives long tasks)' },
+  { command: 'jobs',     description: 'List recent background jobs' },
+  { command: 'job',      description: 'Show details for one background job' },
   { command: 'export',   description: 'Export current session as a Markdown file' },
   { command: 'model',    description: 'Show or set model (sonnet, opus, haiku)' },
   { command: 'status',   description: 'Full server status (PM2, disk, memory)' },
@@ -84,6 +88,35 @@ bot.getMe().then((me) => {
     for (const uid of userIds) {
       bot.sendMessage(uid, `Claude Code Relay is online. (@${me.username})\n\nBuilt by Brad Besner · https://github.com/bbesner/claude-telegram-relay`).catch(() => {});
     }
+  }
+
+  // v1.8.0: reconcile background jobs that were running when we last shut
+  // down. Any job whose subprocess is still alive gets a fresh watcher;
+  // any whose subprocess finished during the outage fires a belated
+  // completion notification to its originating chat.
+  try {
+    const rec = jobRunner.reconcileOnStartup({
+      onResume: (job) => {
+        log.info('Job reconciled — still running', { jobId: job.jobId, pid: job.pid });
+        // Quietly tell the user we picked back up. Avoids a surprise
+        // completion message later with no context.
+        bot.sendMessage(job.chatId,
+          `🔄 Background job <code>${job.jobId}</code> is still running — I'll message when it's done.`,
+          { parse_mode: 'HTML' }
+        ).catch(() => {});
+      },
+      onComplete: (job) => {
+        log.info('Job reconciled — finalized at startup', { jobId: job.jobId, state: job.state });
+        notifyCompletion(bot, job).catch((e) => {
+          log.warn('Reconciliation notifyCompletion failed', { jobId: job.jobId, error: e.message });
+        });
+      },
+    });
+    if (rec && (rec.reAttached > 0 || rec.finalized > 0)) {
+      log.info('Job reconciliation summary', rec);
+    }
+  } catch (e) {
+    log.warn('Job reconciliation threw', { error: e.message });
   }
 
   // v1.5.0+: start the update checker. Runs once now (async, non-blocking)
