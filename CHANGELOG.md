@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0] — 2026-04-24
+
+"Live output" release: the relay now shows you what Claude is doing while
+it does it. Instead of a silent 30-second typing dot followed by one big
+message, you see a single message that updates in place: **🤔 Thinking…
+→ 📖 Using Read /path/to/file.js → 📝 Replying…** and finally the full
+answer. Tool-heavy tasks feel dramatically more responsive on a phone.
+
+### Added
+
+- **`streamClaude()` in `lib/claude-cli.js`** — a streaming variant of
+  `invokeClaude` that spawns Claude with `--output-format stream-json
+  --verbose` and emits normalized, UI-friendly events via an `onEvent`
+  callback: `init`, `thinking`, `tool_use`, `tool_result`, `text`,
+  `final`, `error`. Resolves with the same shape as `invokeClaude` plus
+  a new `toolsUsed` field, and shares the v1.6.0 ACTIVE registry so
+  `/interrupt` kills a streaming subprocess exactly like a synchronous
+  one.
+- **`lib/stream-renderer.js`** — owns the live-edit Telegram message
+  lifecycle for one chat turn:
+  - Sends a single seed placeholder on the first event
+  - Edits it in place as the phase changes (Thinking → Using Tool:X →
+    Replying → Done), with per-tool icons (📖 Read, 🔎 Grep, 🖥 Bash,
+    ✏ Edit, 🌐 Web*, 🤖 Task, …) and a short summary ("Read /a/b.js",
+    "Bash <first line>", "Grep <pattern>")
+  - Throttles and coalesces edits (default one edit per ~800 ms) so
+    bursty event streams don't hit Telegram's per-chat rate limits
+  - `finalize({text})` swaps the seed for the formatted response,
+    preserving the v1.4.0 HTML + syntax-highlighted code block rendering
+    and spilling into extra messages past the 4096-char Telegram cap
+  - `finalizeError(html)` replaces the seed with an explicit error
+    message so a "Thinking…" placeholder never lingers after a timeout,
+    interrupt, or resume failure
+  - `ensureSeed()` memoizes the in-flight send so concurrent callers
+    never produce duplicate seed messages
+- **`STREAMING` env var (default `true`)** — new opt-out flag. Set
+  `STREAMING=false` in `.env` to fall back to the v1.6.0 synchronous
+  path. Documented in README and `config/env.example`. Useful escape
+  hatch if a future Claude Code release changes the stream-json schema.
+- **Tool-name reporting in logs** — `Response sent` log line now
+  includes `toolsUsed: [...]` and `streamed: true|false`, so pm2 logs
+  show what Claude did during each turn at a glance.
+- **Tests (+~45 assertions, 2 new hermetic suites)**:
+  - `test/test-stream-claude.js` — fake `claude` binary that writes a
+    scripted stream-json sequence (~600 ms) over stdout; verifies
+    progressive event arrival, `toolsUsed` capture in order, session id
+    discovery, final resolution shape, and clean interrupt mid-stream.
+  - `test/test-stream-renderer.js` — mock bot recording every
+    `sendMessage`/`editMessageText`; verifies single seed (no dupes
+    under concurrency), live edits on tool_use, throttling collapsing
+    10 events into ≤3 edits, finalize chunking 7500-char text into
+    multiple messages, finalizeError replacing seed, and the
+    `summarizeTool`/`toolIcon` helpers.
+
+### Changed
+
+- **`bot.js` main handler** — for text and media messages, invokes
+  `streamClaude` through `createRenderer` instead of `invokeClaude` +
+  `sendChunkedResponse`. Error paths (interrupt, timeout, resume
+  failure) route through `renderer.finalizeError` so the seed message
+  is replaced with the explanation, not left dangling next to a
+  separate error send.
+- **Typing indicator** remains on as a belt-and-suspenders between the
+  `enqueue` start and the first event arrival (~200 ms), then becomes
+  redundant once the seed message is visible.
+
+### Fixed
+
+- **Falsy-zero bug in `createRenderer`**: `opts.minEditMs ||
+  DEFAULT_MIN_EDIT_MS` meant a passed-in `0` was silently replaced with
+  the 800 ms default. Now uses `??` so tests (and callers) can disable
+  throttling by passing `0` explicitly.
+
+### Tests
+
+- Test suite: 17 suites, ~500 assertions, ~2.4s. Zero new dependencies.
+
+---
+
 ## [1.6.0] — 2026-04-24
 
 "Trust" release: the relay no longer silently swaps broken sessions for

@@ -1,6 +1,6 @@
 {
   "name": "claude-telegram-relay",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Relay messages between Telegram and Claude Code CLI",
   "main": "bot.js",
   "scripts": {
