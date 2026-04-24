@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.0] — 2026-04-24
+
+"Durable execution" release: tasks that need more than the 8-minute
+synchronous request window now run as detached background jobs that
+survive the relay restarting, with a completion message delivered to
+the originating chat when they're done. Closes the last major
+durability gap from the original session plan.
+
+### Added
+
+- **`lib/job-manager.js`** — job registry backed by
+  `~/.claude-telegram-relay/jobs.json` with atomic rename persistence
+  (same pattern as sessions.json). Tracks: `jobId` (short `job_xxxxxx`
+  form), chat + session linkage, state machine
+  (`queued → running → completed|failed|timed_out|cancelled|orphaned`),
+  pid, pre-output path, toolsUsed, cost, durationMs, and a `lastStatus`
+  phrase for in-flight diagnostics. GC drops terminal jobs older than
+  168 hours (1 week) and deletes their output files.
+- **`lib/job-runner.js`** — spawns Claude with `--output-format
+  stream-json --verbose` as a **detached** subprocess, redirects stdout
+  to a per-job `.jsonl` file, `child.unref()`s, then tails the file
+  with a 1s poll to parse events and drive state. **Durability:** even
+  if the relay (pm2) restarts, the subprocess keeps writing; on next
+  startup `reconcileOnStartup()` scans every state=running entry,
+  checks pid liveness, and either re-attaches a watcher or finalizes
+  from the file's tail (completed, orphaned, or cancelled). Belated
+  completion notifications are sent to the originating chat.
+- **`/run <prompt>`** — start a background job. Replies immediately
+  with the jobId. One concurrent job per chat (prevents runaway
+  spawns); overlap attempts are rejected with a `/cancel` hint.
+  Inherits the chat's current session (continues the thread), and on
+  successful completion advances the session pointer + records cost
+  the same way as a foreground turn.
+- **`/jobs`** — lists the 10 most recent background jobs for the
+  current chat with an icon-scannable state column
+  (🔄/✅/❌/⌛/⏹/🚫) and a short prompt preview.
+- **`/job <id>`** — full details: state, session, pid, created /
+  started / finished timestamps, duration, cost, toolsUsed,
+  lastStatus, error, and the prompt preview.
+- **`/cancel <id>`** — SIGTERMs a running job; flips state to
+  `cancelled` after the watcher observes the child has died. Called
+  without an id, `/cancel` behaves as the existing `/interrupt` alias
+  (cancels the foreground subprocess for the current chat).
+- **Completion notification** — when a job finishes, the bot
+  proactively messages the originating chat with a header
+  (state icon + jobId + duration + cost + tools used) followed by the
+  full response text, chunked and HTML-formatted through the same
+  renderer as the synchronous path.
+- **Startup reconciliation** in `bot.js` — called immediately after
+  the Telegram `bot.getMe()` resolves. For jobs whose subprocess is
+  still alive, sends a short "still running" message so the user
+  isn't surprised by a later completion from an earlier relay life.
+- **`JOB_TIMEOUT_MS` env var (default `3600000` = 1 hour)** — wall-
+  clock cap for a single background job; documented in
+  `config/env.example` and README.
+- **Tests (+~50 assertions, 2 new hermetic suites)**:
+  - `test/test-job-manager.js` — CRUD, state transitions, dedupe on
+    `appendTool`, one-active-per-chat queries, reload persistence,
+    GC of 1-week-old terminals.
+  - `test/test-job-runner.js` — end-to-end with two fake `claude`
+    binaries (a scripted streamer and a hang-forever sleeper):
+    happy-path onComplete with result/cost/toolsUsed captured,
+    `cancelJob()` terminating a running job, and active-slot release
+    after completion.
+
+### Changed
+
+- **`lib/commands.js`** — `setSession` and `recordCost` are now
+  imported from session-manager so `notifyCompletion()` can advance
+  the chat's session pointer when a background job finishes
+  successfully. `notifyCompletion()` is exported for bot.js to reuse
+  during startup reconciliation so format parity is guaranteed.
+- **Bot command menu** registers `/run`, `/jobs`, `/job` so they
+  appear in the native `/` autocomplete. `/cancel` was already
+  registered as a v1.6.0 alias; its handler now also accepts a jobId.
+
+### Intentional limitations (v1)
+
+- One concurrent background job per chat.
+- No retry / auto-restart of a dead subprocess — an unexpected exit
+  without a `result` event finalizes as `orphaned`.
+- No permission-prompt forwarding — jobs inherit whatever the Claude
+  CLI does in headless, non-TTY mode. If you need tool approvals, use
+  a foreground message instead.
+
+### Tests
+
+- Test suite: 19 suites, 541 assertions, ~5.5s. Zero new dependencies.
+
+---
+
 ## [1.7.0] — 2026-04-24
 
 "Live output" release: the relay now shows you what Claude is doing while
