@@ -352,21 +352,38 @@ pm2 monit
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────────────────┐     ┌───────────────┐
-│  Telegram    │────▶│  claude-telegram-    │────▶│  claude -p    │
-│  (polling)   │◀────│  relay (Node.js)     │◀────│  (subprocess) │
-└─────────────┘     └──────────────────────┘     └───────────────┘
-                              │
-                     ┌────────┴────────┐
-                     │  sessions.json  │
-                     │  (session state)│
-                     └─────────────────┘
+┌──────────┐  poll   ┌──────────────────────────────────────────┐
+│ Telegram │◀───────▶│  claude-telegram-relay  (Node, single PM2 │
+└──────────┘         │  process)                                  │
+                     │                                            │
+                     │  ┌──────────────┐  ┌────────────────────┐ │
+                     │  │ stream-      │  │ job-runner         │ │
+                     │  │ renderer     │  │ (detached spawns)  │ │
+                     │  │ (live edits) │  │                    │ │
+                     │  └──────┬───────┘  └─────────┬──────────┘ │
+                     │         │ events             │ tail file  │
+                     │         ▼                    ▼            │
+                     │  ┌──────────────────────────────────────┐ │
+                     │  │ claude -p --output-format stream-json│ │
+                     │  │ (subprocess, foreground OR detached) │ │
+                     │  └──────────────────────────────────────┘ │
+                     └─────────────────────┬──────────────────────┘
+                                           │
+                  ┌────────────────────────┴────────────────────────┐
+                  │ ~/.claude-telegram-relay/                       │
+                  │   ├── sessions.json   (chat → session state)    │
+                  │   ├── jobs.json       (background-job registry) │
+                  │   └── jobs/job_xxxxxx.jsonl   (per-job stdout)  │
+                  └─────────────────────────────────────────────────┘
 ```
 
 - **Polling mode** — no open ports, no webhook, no attack surface
 - **Stdin piping** — prompts are written to claude's stdin, avoiding shell escaping issues
-- **Per-chat queues** — messages are processed sequentially per chat, concurrently across chats
-- **HTML formatting** — Markdown is converted to Telegram HTML for reliable rendering
+- **Per-chat queues** — foreground messages are processed sequentially per chat, concurrently across chats
+- **Streaming output (v1.7.0+)** — claude is invoked with `--output-format stream-json --verbose`; `lib/stream-renderer.js` parses events and edits a single Telegram message in place as work progresses
+- **Detached background jobs (v1.8.0+)** — `/run` spawns claude with `{ detached: true, stdio: ['pipe', file, file] }` and `unref()`s. The subprocess survives the relay restarting; on next startup `lib/job-runner.js:reconcileOnStartup()` checks pid liveness and either re-attaches a watcher or finalizes the job from the file's tail
+- **Atomic JSON state** — both `sessions.json` and `jobs.json` write to a `.tmp` sibling and `rename(2)` so a crash mid-write can never corrupt state
+- **HTML formatting** — Markdown is converted to Telegram HTML for reliable rendering, with syntax-highlighted code blocks (v1.4.0+)
 
 ## Security
 
@@ -390,6 +407,21 @@ pm2 monit
 
 **Session seems stuck:**
 - Send `/new` to clear the session and start fresh
+
+**"⚠ Previous session can no longer be resumed" warning (v1.6.0+):**
+- The session's transcript file under `~/.claude/projects/<bucket>/<id>.jsonl` is missing or empty. Either start fresh with `/new` or pick another thread with `/sessions` then `/resume <n>`. The relay will not silently substitute a fresh session.
+
+**Long task taking forever, want to cancel (v1.6.0+):**
+- Send `/interrupt` (or `/stop`, `/cancel`) to SIGTERM the in-flight Claude subprocess. Your session state is preserved.
+
+**Background job stuck or orphaned (v1.8.0+):**
+- `/jobs` shows the recent list with state icons. `/job <id>` shows full details including the last status phrase. `/cancel <id>` SIGTERMs a running job. A job in state `orphaned` means its subprocess exited without writing a `result` event (usually means it crashed); inspect the `outputPath` file under `~/.claude-telegram-relay/jobs/` if you need to debug.
+
+**Streaming feels broken or messages don't update (v1.7.0+):**
+- Set `STREAMING=false` in `.env` and restart to fall back to the v1.6.0 synchronous path. File a GitHub issue with what you saw.
+
+**Costs not showing in `/info` or `/cost`:**
+- On a Max subscription, `total_cost_usd` is reported as $0.00 by the CLI — that's expected. Cost only appears for per-API-key authenticated runs.
 
 ## Contributing
 

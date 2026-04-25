@@ -312,17 +312,23 @@ Give the user a brief "what to expect next" summary:
 
 > "You're all set. The relay is running and listening. Here's what you should know:
 >
-> **Native command menu** — Tap the `/` button in Telegram, or the Menu button next to the chat input, to see all 13+ commands with descriptions.
+> **Native command menu** — Tap the `/` button in Telegram, or the Menu button next to the chat input, to see all 19 commands with descriptions.
 >
 > **Most useful commands:**
 > - `/sessions` — browse recent Claude Code sessions across Desktop, VS Code, and Telegram
 > - `/resume <n>` — jump into any session from the `/sessions` list
 > - `/save <name>` — label the current session for easy recall later
 > - `/new` — start a fresh conversation
-> - `/info` — show current session ID, message count, uptime
+> - `/info` — current session ID, status (🟢/🟡), last error, cost, uptime *(v1.6.0+)*
+> - `/cost` — last-turn and cumulative session cost *(v1.6.0+)*
+> - `/interrupt` — cancel an in-flight Claude request without losing the session *(v1.6.0+)*
+> - `/run <prompt>` — start a durable background job that survives long tasks and the relay restarting; you'll get a Telegram message when it's done *(v1.8.0+)*
+> - `/jobs`, `/job <id>`, `/cancel <id>` — manage background jobs *(v1.8.0+)*
 > - `/export` — dump the current session as a Markdown file
 > *(if OpenClaw is wired up)*
 > - `/memory <query>` — search your OpenClaw memory directly
+>
+> **Live status while Claude works (v1.7.0+)** — instead of a silent typing dot, you'll see a single message that updates in place: 🤔 Thinking → 📖 Using Read /path/to/file → 📝 Replying → final answer. Set `STREAMING=false` in `.env` to disable.
 >
 > **Inline buttons** — Every Claude response ends with tappable `[+ New] [💾 Save] [ℹ Info]` buttons.
 >
