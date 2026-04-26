@@ -98,6 +98,7 @@ All configuration lives in `.env` (created by the installer):
 | `WORKING_DIR` | No | `$HOME` | Working directory for Claude CLI (determines which `CLAUDE.md` is loaded) |
 | `CLAUDE_MODEL` | No | default | Model override (e.g., `sonnet`, `opus`) |
 | `CLAUDE_TIMEOUT_MS` | No | `120000` | Per-message timeout in milliseconds |
+| `CLAUDE_PERMISSION_MODE` | No | _empty_ | v1.9.0+: permission mode for the spawned Claude. Print mode can't ask for confirmation, so the subprocess otherwise inherits whatever's in your `settings.json` — typically tight. Values: `bypass` (passes `--dangerously-skip-permissions`), `acceptEdits`, `plan`, `default`, or empty. **Security:** `bypass` gives anyone in `ALLOWED_USER_IDS` your full Claude Code surface. |
 | `MESSAGE_QUEUE_MAX` | No | `5` | Max queued messages per user |
 | `GROUP_MODE` | No | `mention` | Group behavior: `mention` (respond to @bot only) or `all` |
 | `SEND_STARTUP_MESSAGE` | No | `false` | Notify users when bot starts |

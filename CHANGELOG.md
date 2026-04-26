@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] — 2026-04-26
+
+Permission-mode passthrough so the relay's headless Claude can match
+the operator's interactive setup.
+
+### Added
+
+- **`CLAUDE_PERMISSION_MODE` env var.** Print-mode Claude has no human
+  to confirm tool-use prompts, so without an explicit mode the spawned
+  subprocess is pinned to whatever's in the operator's `settings.json`
+  — typically tight, which made the bot feel broken for anything
+  outside the allowlist. Operators who've gated the bot via
+  `ALLOWED_USER_IDS` and want the relay to act with their full Claude
+  Code surface can now opt in:
+  - `CLAUDE_PERMISSION_MODE=bypass` → adds `--dangerously-skip-permissions`
+    to the spawn args (skips ALL permission prompts)
+  - `CLAUDE_PERMISSION_MODE=acceptEdits` / `plan` / `default` →
+    adds `--permission-mode <mode>`
+  - Empty / unset (default) → no flag passed; current behavior.
+- Invalid values log a warning and fall back to "no flag passed", so
+  a typo can't silently change behavior.
+
+### Security note
+
+`bypass` gives anyone in `ALLOWED_USER_IDS` the full surface of the
+operator's Claude Code account from Telegram. The user-ID allowlist
+becomes the trust boundary. Default is opt-in for that reason.
+
+---
+
 ## [1.8.0] — 2026-04-24
 
 "Durable execution" release: tasks that need more than the 8-minute
